@@ -1,0 +1,19 @@
+[phases.setup]
+nixPkgs = ["...", "libzip", "zlib"]
+
+[phases.install]
+cmds = [
+    "mkdir -p /etc/php/conf.d",
+    "install-php-extensions zip pdo_mysql ctype curl dom fileinfo filter hash mbstring openssl pcre pdo session tokenizer xml gd bcmath",
+    "COMPOSER_ALLOW_SUPERUSER=1 composer install --optimize-autoloader --no-dev --no-interaction"
+]
+
+[phases.build]
+cmds = [
+    "php artisan config:cache",
+    "php artisan route:cache",
+    "php artisan view:cache"
+]
+
+[start]
+cmd = "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8080}"
