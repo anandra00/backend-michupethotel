@@ -9,3 +9,5 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('bookings:cancel-unpaid')->everyMinute();
+Schedule::command('backup:run')->daily();
+Schedule::command('backup:clean')->daily();
