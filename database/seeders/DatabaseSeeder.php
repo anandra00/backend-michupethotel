@@ -170,6 +170,7 @@ class DatabaseSeeder extends Seeder
             'total_cats' => 2,
             'total_price' => 900000,
             'status' => 'approved',
+            'payment_status' => 'paid',
             'notes' => 'Luna & Milo, tolong jaga bersama ya.',
         ]);
 
@@ -192,6 +193,7 @@ class DatabaseSeeder extends Seeder
             'total_cats' => 1,
             'total_price' => 200000,
             'status' => 'checked_out',
+            'payment_status' => 'paid',
             'notes' => 'Bella sudah checkout.',
         ]);
 
