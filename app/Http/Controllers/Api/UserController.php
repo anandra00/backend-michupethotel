@@ -7,6 +7,7 @@ use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rules\Password;
 
 class UserController extends Controller
 {
@@ -22,7 +23,7 @@ class UserController extends Controller
             'phone' => 'sometimes|nullable|string|max:20',
             'email' => 'sometimes|required|email|unique:users,email,'.$user->id,
             'address' => 'sometimes|nullable|string|max:500',
-            'password' => 'sometimes|nullable|min:6|confirmed',
+            'password' => ['sometimes', 'nullable', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
         ]);
 
         if (isset($validated['password']) && $validated['password']) {
