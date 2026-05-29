@@ -50,7 +50,7 @@ return [
     |
     */
 
-    'expiration' => 43200,
+    'expiration' => 1440, // 24 hours — reduced from 30 days for security
 
     /*
     |--------------------------------------------------------------------------

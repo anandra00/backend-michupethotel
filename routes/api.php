@@ -16,14 +16,17 @@ use App\Http\Controllers\SettingController;
 use App\Http\Middleware\IsAdmin;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['throttle:60,1'])->group(function () {
+// Auth endpoints — strict rate limit (5 attempts/min) to prevent brute force
+Route::middleware(['throttle:5,1'])->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+});
 
+Route::middleware(['throttle:60,1'])->group(function () {
     // Public Settings
     Route::get('/settings', [SettingController::class, 'index']);
 
-    // Webhook Route
+    // Webhook Route (Midtrans callback — no auth needed)
     Route::post('/midtrans/callback', [PaymentCallbackController::class, 'handleCallback']);
 
     // Public routes

@@ -11,10 +11,10 @@ class PaymentCallbackController extends Controller
 {
     public function handleCallback(Request $request)
     {
-        $serverKey = env('MIDTRANS_SERVER_KEY');
+        $serverKey = config('services.midtrans.server_key');
         $hashed = hash('sha512', $request->order_id.$request->status_code.$request->gross_amount.$serverKey);
 
-        if ($hashed == $request->signature_key) {
+        if ($hashed === $request->signature_key) {
             // Check order_id format "BKG-{id}-{time}"
             $orderIdParts = explode('-', $request->order_id);
             if (count($orderIdParts) < 2) {

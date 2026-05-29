@@ -93,18 +93,25 @@ class BookingController extends Controller
         ]);
 
         // --- MIDTRANS INTEGRATION ---
-        Config::$serverKey = env('MIDTRANS_SERVER_KEY');
-        Config::$isProduction = env('MIDTRANS_IS_PRODUCTION', false);
+        Config::$serverKey = config('services.midtrans.server_key');
+        Config::$isProduction = config('services.midtrans.is_production', false);
         Config::$isSanitized = true;
         Config::$is3ds = true;
 
-        // Workaround for local Laragon/XAMPP cURL SSL certificate issues
-        // and fix for Midtrans PHP library bug expecting CURLOPT_HTTPHEADER
-        Config::$curlOptions = [
-            CURLOPT_SSL_VERIFYHOST => 0,
-            CURLOPT_SSL_VERIFYPEER => 0,
-            CURLOPT_HTTPHEADER => [],
-        ];
+        // SSL verification: enabled in production, disabled only in local dev
+        if (app()->environment('local')) {
+            Config::$curlOptions = [
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_SSL_VERIFYPEER => 0,
+                CURLOPT_HTTPHEADER => [],
+            ];
+        } else {
+            Config::$curlOptions = [
+                CURLOPT_SSL_VERIFYHOST => 2,
+                CURLOPT_SSL_VERIFYPEER => 1,
+                CURLOPT_HTTPHEADER => [],
+            ];
+        }
 
         $params = [
             'transaction_details' => [
@@ -123,7 +130,7 @@ class BookingController extends Controller
             $booking->update(['snap_token' => $snapToken]);
         } catch (\Exception $e) {
             \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
-            if (env('APP_ENV', 'local') === 'local') {
+            if (app()->environment('local')) {
                 // Fallback for local development so QA testing is not blocked by Midtrans credential issues
                 $booking->update(['snap_token' => 'dummy_token_local_testing_'.time()]);
             } else {
