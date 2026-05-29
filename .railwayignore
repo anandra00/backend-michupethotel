@@ -1,6 +1,0 @@
-Dockerfile
-docker-compose.yml
-docker/
-.git
-.github
-tests/

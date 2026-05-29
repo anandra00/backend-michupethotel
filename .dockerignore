@@ -1,0 +1,10 @@
+.git
+.github
+docker-compose.yml
+docker/
+tests/
+node_modules/
+.env
+.env.backup
+storage/logs/*.log
+nixpacks.toml
