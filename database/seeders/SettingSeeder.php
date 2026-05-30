@@ -24,6 +24,7 @@ class SettingSeeder extends Seeder
             ['key' => 'notify_booking', 'value' => '1', 'type' => 'boolean'],
             ['key' => 'notify_checkout', 'value' => '1', 'type' => 'boolean'],
             ['key' => 'notify_new_user', 'value' => '0', 'type' => 'boolean'],
+            ['key' => 'gps_checkin_radius', 'value' => '500', 'type' => 'number'],
         ];
 
         foreach ($settings as $setting) {

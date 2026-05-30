@@ -267,6 +267,12 @@ class BookingController extends Controller
         $booking = Booking::findOrFail($id);
         $user = Auth::user();
 
+        // Block deleting paid bookings for non-admin users.
+        // Paid bookings must go through the cancellation/refund workflow.
+        if ($user->role !== 'admin' && $booking->payment_status === 'paid') {
+            return response()->json(['message' => 'Tidak dapat menghapus pesanan yang sudah dibayar. Gunakan fitur batalkan pesanan untuk memproses refund.'], 400);
+        }
+
         if ($user->role !== 'admin') {
             if ($booking->user_id !== $user->id || $booking->status !== 'pending') {
                 return response()->json(['message' => 'Unauthorized or booking cannot be deleted'], 403);

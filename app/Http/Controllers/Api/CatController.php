@@ -28,8 +28,8 @@ class CatController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'breed' => 'required|string|max:255',
-            'age' => 'required|integer',
-            'weight' => 'required|numeric',
+            'age' => 'required|integer|min:0',
+            'weight' => 'required|numeric|min:0.1',
             'gender' => 'required|string|in:male,female,Male,Female',
             'notes' => 'nullable|string',
             'photo' => 'nullable|image|max:2048',
@@ -57,8 +57,8 @@ class CatController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
             'breed' => 'sometimes|required|string|max:255',
-            'age' => 'sometimes|required|integer',
-            'weight' => 'sometimes|required|numeric',
+            'age' => 'sometimes|required|integer|min:0',
+            'weight' => 'sometimes|required|numeric|min:0.1',
             'gender' => 'sometimes|required|string|in:male,female,Male,Female',
             'notes' => 'nullable|string',
             'photo' => 'nullable|image|max:2048',

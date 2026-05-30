@@ -21,7 +21,12 @@ class SettingController extends Controller
         ]);
 
         // Whitelist: only these setting keys may be modified via API
-        $allowedKeys = ['admin_fee', 'site_name', 'contact_phone', 'contact_email', 'address'];
+        $allowedKeys = [
+            'admin_fee', 'hotel_name', 'email', 'phone', 'address', 
+            'open_time', 'close_time', 'max_capacity', 
+            'notify_booking', 'notify_checkout', 'notify_new_user', 
+            'gps_checkin_radius'
+        ];
 
         foreach ($validated['settings'] as $key => $value) {
             if (! in_array($key, $allowedKeys)) {
