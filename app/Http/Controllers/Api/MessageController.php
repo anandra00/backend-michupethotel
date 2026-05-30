@@ -40,7 +40,7 @@ class MessageController extends Controller
 
         $validated = $request->validate([
             'message' => 'required|string',
-            'photo' => 'nullable|image|max:5120',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
         $photoPath = null;

@@ -27,17 +27,42 @@ class DashboardReportingService
             // Valid statuses for revenue & count
             $validStatuses = ['pending', 'approved', 'checked_in', 'checked_out'];
 
+            // Fetch all bookings created since 6 months ago to calculate summary and charts in memory
+            $sixMonthsAgo = Carbon::now()->subMonths(5)->startOfMonth();
+            $allBookingsIn6Months = Booking::where('created_at', '>=', $sixMonthsAgo)->get();
+
             // 1. Revenue (only count paid bookings)
-            $revenueThisMonth = Booking::whereMonth('created_at', $thisMonth)->whereYear('created_at', $thisYear)->whereIn('status', $validStatuses)->where('payment_status', 'paid')->sum('total_price');
-            $revenueLastMonth = Booking::whereMonth('created_at', $lmMonth)->whereYear('created_at', $lmYear)->whereIn('status', $validStatuses)->where('payment_status', 'paid')->sum('total_price');
+            $revenueThisMonth = $allBookingsIn6Months->filter(function ($b) use ($thisMonth, $thisYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $thisMonth && $created->year === $thisYear && in_array($b->status, $validStatuses) && $b->payment_status === 'paid';
+            })->sum('total_price');
+
+            $revenueLastMonth = $allBookingsIn6Months->filter(function ($b) use ($lmMonth, $lmYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $lmMonth && $created->year === $lmYear && in_array($b->status, $validStatuses) && $b->payment_status === 'paid';
+            })->sum('total_price');
 
             // Split Revenue
-            $boardRevenue = Booking::whereMonth('created_at', $thisMonth)->whereYear('created_at', $thisYear)->whereIn('status', $validStatuses)->where('payment_status', 'paid')->where('booking_type', 'board')->sum('total_price');
-            $sitterRevenue = Booking::whereMonth('created_at', $thisMonth)->whereYear('created_at', $thisYear)->whereIn('status', $validStatuses)->where('payment_status', 'paid')->where('booking_type', 'sitter')->sum('total_price');
+            $boardRevenue = $allBookingsIn6Months->filter(function ($b) use ($thisMonth, $thisYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $thisMonth && $created->year === $thisYear && in_array($b->status, $validStatuses) && $b->payment_status === 'paid' && $b->booking_type === 'board';
+            })->sum('total_price');
+
+            $sitterRevenue = $allBookingsIn6Months->filter(function ($b) use ($thisMonth, $thisYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $thisMonth && $created->year === $thisYear && in_array($b->status, $validStatuses) && $b->payment_status === 'paid' && $b->booking_type === 'sitter';
+            })->sum('total_price');
 
             // 2. Bookings
-            $bookingsThisMonth = Booking::whereMonth('created_at', $thisMonth)->whereYear('created_at', $thisYear)->whereIn('status', $validStatuses)->count();
-            $bookingsLastMonth = Booking::whereMonth('created_at', $lmMonth)->whereYear('created_at', $lmYear)->whereIn('status', $validStatuses)->count();
+            $bookingsThisMonth = $allBookingsIn6Months->filter(function ($b) use ($thisMonth, $thisYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $thisMonth && $created->year === $thisYear && in_array($b->status, $validStatuses);
+            })->count();
+
+            $bookingsLastMonth = $allBookingsIn6Months->filter(function ($b) use ($lmMonth, $lmYear, $validStatuses) {
+                $created = Carbon::parse($b->created_at);
+                return $created->month === $lmMonth && $created->year === $lmYear && in_array($b->status, $validStatuses);
+            })->count();
 
             // 3. New Users
             $usersThisMonth = User::where('role', 'user')->whereMonth('created_at', $thisMonth)->whereYear('created_at', $thisYear)->count();
@@ -68,28 +93,36 @@ class DashboardReportingService
             $chartData = [];
             for ($i = 5; $i >= 0; $i--) {
                 $monthDate = Carbon::now()->subMonths($i);
-                $val = Booking::whereMonth('created_at', $monthDate->month)
-                    ->whereYear('created_at', $monthDate->year)
-                    ->whereIn('status', $validStatuses)
-                    ->count();
+                $m = $monthDate->month;
+                $y = $monthDate->year;
+                $val = $allBookingsIn6Months->filter(function ($b) use ($m, $y, $validStatuses) {
+                    $created = Carbon::parse($b->created_at);
+                    return $created->month === $m && $created->year === $y && in_array($b->status, $validStatuses);
+                })->count();
                 $chartData[] = [
                     'month' => $monthDate->format('M'),
                     'val' => $val,
                 ];
             }
 
-            // 7. 30-Day Daily Room Occupancy Chart Data
+            // 7. 30-Day Daily Room Occupancy Chart Data (1 query to fetch bookings in range, filter in memory)
+            $thirtyDaysAgo = Carbon::now()->subDays(29)->toDateString();
+            $today = Carbon::now()->toDateString();
+
+            $bookingsInPeriod = Booking::where('booking_type', 'board')
+                ->whereIn('status', ['approved', 'checked_in', 'checked_out'])
+                ->where('check_in', '<=', $today)
+                ->where('check_out', '>=', $thirtyDaysAgo)
+                ->get(['check_in', 'check_out']);
+
             $occupancyChartData = [];
             for ($i = 29; $i >= 0; $i--) {
                 $date = Carbon::now()->subDays($i);
                 $dateStr = $date->toDateString();
 
-                // Calculate active room bookings on that day
-                $activeBoardCount = Booking::where('booking_type', 'board')
-                    ->whereIn('status', ['approved', 'checked_in', 'checked_out'])
-                    ->where('check_in', '<=', $dateStr)
-                    ->where('check_out', '>=', $dateStr)
-                    ->count();
+                $activeBoardCount = $bookingsInPeriod->filter(function ($booking) use ($dateStr) {
+                    return $booking->check_in <= $dateStr && $booking->check_out >= $dateStr;
+                })->count();
 
                 $rate = $totalRooms > 0 ? min(100, round(($activeBoardCount / $totalRooms) * 100)) : 0;
 
@@ -104,20 +137,16 @@ class DashboardReportingService
             $revenueChartData = [];
             for ($i = 5; $i >= 0; $i--) {
                 $monthDate = Carbon::now()->subMonths($i);
+                $m = $monthDate->month;
+                $y = $monthDate->year;
 
-                $boardRev = Booking::whereMonth('created_at', $monthDate->month)
-                    ->whereYear('created_at', $monthDate->year)
-                    ->whereIn('status', $validStatuses)
-                    ->where('payment_status', 'paid')
-                    ->where('booking_type', 'board')
-                    ->sum('total_price');
+                $periodBookings = $allBookingsIn6Months->filter(function ($b) use ($m, $y, $validStatuses) {
+                    $created = Carbon::parse($b->created_at);
+                    return $created->month === $m && $created->year === $y && in_array($b->status, $validStatuses) && $b->payment_status === 'paid';
+                });
 
-                $sitterRev = Booking::whereMonth('created_at', $monthDate->month)
-                    ->whereYear('created_at', $monthDate->year)
-                    ->whereIn('status', $validStatuses)
-                    ->where('payment_status', 'paid')
-                    ->where('booking_type', 'sitter')
-                    ->sum('total_price');
+                $boardRev = $periodBookings->where('booking_type', 'board')->sum('total_price');
+                $sitterRev = $periodBookings->where('booking_type', 'sitter')->sum('total_price');
 
                 $revenueChartData[] = [
                     'month' => $monthDate->format('M'),

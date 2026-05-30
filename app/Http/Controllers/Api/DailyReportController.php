@@ -42,7 +42,7 @@ class DailyReportController extends Controller
             'badge_bg' => 'nullable|string',
             'icon_type' => 'nullable|string',
             'time' => 'required|string',
-            'photo' => 'nullable|image|max:5120',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:5120',
         ]);
 
         // Security & Logic Guard: Validate that the cat belongs to the booking's owner
