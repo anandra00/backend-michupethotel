@@ -8,7 +8,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('bookings:cancel-unpaid')]
-#[Description('Delete pending bookings that have been unpaid for more than 15 minutes')]
+#[Description('Cancel pending bookings that have been unpaid for more than 1 hour')]
 class CancelUnpaidBookings extends Command
 {
     /**
@@ -16,11 +16,23 @@ class CancelUnpaidBookings extends Command
      */
     public function handle()
     {
-        $count = Booking::where('status', 'pending')
+        $bookings = Booking::where('status', 'pending')
             ->where('payment_status', 'unpaid')
-            ->where('created_at', '<=', now()->subMinutes(15))
-            ->delete();
+            ->where('created_at', '<=', now()->subHour())
+            ->get();
 
-        $this->info("Deleted {$count} unpaid bookings.");
+        $count = 0;
+        foreach ($bookings as $booking) {
+            $booking->update([
+                'status' => 'cancelled',
+                'cancelled_at' => now(),
+                'notes' => $booking->notes 
+                    ? $booking->notes . "\n\n[System]: Pesanan dibatalkan otomatis karena tidak ada pembayaran dalam waktu 1 jam."
+                    : "[System]: Pesanan dibatalkan otomatis karena tidak ada pembayaran dalam waktu 1 jam.",
+            ]);
+            $count++;
+        }
+
+        $this->info("Cancelled {$count} unpaid bookings.");
     }
 }
