@@ -64,12 +64,14 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::post('/bookings/{booking}/sitter-checkin', [BookingController::class, 'sitterCheckin']);
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
 
-        // Coupons validation (user-facing)
-        Route::post('/coupons/validate', [CouponController::class, 'validateCoupon']);
+        // Coupons validation (user-facing) — Rate limited to 10 attempts/min
+        Route::middleware('throttle:10,1')->post('/coupons/validate', [CouponController::class, 'validateCoupon']);
 
-        // Chat messages
-        Route::get('/bookings/{booking}/messages', [MessageController::class, 'index']);
-        Route::post('/bookings/{booking}/messages', [MessageController::class, 'store']);
+        // Chat messages — Rate limited to 30 messages/min
+        Route::middleware('throttle:30,1')->group(function () {
+            Route::get('/bookings/{booking}/messages', [MessageController::class, 'index']);
+            Route::post('/bookings/{booking}/messages', [MessageController::class, 'store']);
+        });
 
         // Sitter Review
         Route::post('/bookings/{booking}/review', [BookingController::class, 'reviewSitter']);

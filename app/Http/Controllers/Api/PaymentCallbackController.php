@@ -15,14 +15,15 @@ class PaymentCallbackController extends Controller
         $hashed = hash('sha512', $request->order_id.$request->status_code.$request->gross_amount.$serverKey);
 
         if ($hashed === $request->signature_key) {
-            // Check order_id format "BKG-{id}-{time}"
-            $orderIdParts = explode('-', $request->order_id);
-            if (count($orderIdParts) < 2) {
-                return response()->json(['message' => 'Invalid order ID format'], 400);
-            }
+            $booking = Booking::where('midtrans_order_id', $request->order_id)->first();
 
-            $bookingId = $orderIdParts[1];
-            $booking = Booking::find($bookingId);
+            if (! $booking) {
+                // Fallback for legacy format if needed, but preferred to be strict
+                $orderIdParts = explode('-', $request->order_id);
+                if (count($orderIdParts) >= 2) {
+                    $booking = Booking::find($orderIdParts[1]);
+                }
+            }
 
             if (! $booking) {
                 return response()->json(['message' => 'Booking not found'], 404);

@@ -259,7 +259,7 @@ class BookingController extends Controller
             ));
         }
 
-        return response()->json($booking->load(['user', 'room', 'sitter', 'coupon']));
+        return new BookingResource($booking->load(['user', 'room', 'sitter', 'coupon']));
     }
 
     public function destroy(string $id)

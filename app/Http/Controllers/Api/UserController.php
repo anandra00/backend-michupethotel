@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\Booking;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -36,7 +37,7 @@ class UserController extends Controller
 
         $user->update($validated);
 
-        return response()->json($user);
+        return new UserResource($user);
     }
 
     public function stats(Request $request)

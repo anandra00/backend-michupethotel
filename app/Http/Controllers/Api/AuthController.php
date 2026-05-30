@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\UserResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -13,30 +14,27 @@ class AuthController extends Controller
 {
     public function register(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => [
-                'required',
-                'string',
-                Password::min(8)
-                    ->mixedCase()      // Require uppercase & lowercase
-                    ->numbers()        // Require at least 1 number
-                    ->symbols(),       // Require at least 1 special character
-            ],
+            'password' => ['required', 'confirmed', Password::defaults()],
+            'phone' => 'nullable|string|max:20',
         ]);
 
         $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => 'user', // Default to user — never accept role from request
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => Hash::make($validated['password']),
+            'phone' => $validated['phone'],
         ]);
 
+        $token = $user->createToken('auth_token')->plainTextToken;
+
         return response()->json([
-            'user' => $user,
-            'token' => $user->createToken('auth_token')->plainTextToken,
-        ], 201);
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => new UserResource($user),
+        ]);
     }
 
     public function login(Request $request)
@@ -54,18 +52,17 @@ class AuthController extends Controller
             ]);
         }
 
-        // Revoke all previous tokens to prevent token accumulation
-        $user->tokens()->delete();
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
-            'token' => $user->createToken('auth_token')->plainTextToken,
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => new UserResource($user),
         ]);
     }
 
     public function logout(Request $request)
     {
-        // Delete current token
         $request->user()->currentAccessToken()->delete();
 
         return response()->json([
@@ -75,7 +72,6 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
-        return $request->user();
+        return new UserResource($request->user());
     }
 }
-
