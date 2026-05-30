@@ -48,4 +48,21 @@ class NotificationController extends Controller
 
         return response()->json(['message' => 'Semua telah dibaca']);
     }
+
+    public function testNotification(Request $request)
+    {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $user->notify(new \App\Notifications\AppNotification(
+            'Uji Coba Notifikasi 🔔',
+            'Halo ' . $user->name . ', notifikasi real-time uji coba Anda berhasil dikirim!',
+            'success',
+            '/dashboard'
+        ));
+
+        return response()->json(['message' => 'Notifikasi uji coba berhasil dikirim!']);
+    }
 }

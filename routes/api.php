@@ -46,6 +46,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/notifications', [NotificationController::class, 'index']);
         Route::put('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
         Route::put('/notifications/{id}/mark-as-read', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/test', [NotificationController::class, 'testNotification']);
 
         // Profile update
         Route::get('/user/stats', [UserController::class, 'stats']);
