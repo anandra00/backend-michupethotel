@@ -28,26 +28,6 @@ Route::middleware(['throttle:60,1'])->group(function () {
     // Public Settings
     Route::get('/settings', [SettingController::class, 'index']);
 
-    Route::get('/seed-production', function () {
-        try {
-            if (\App\Models\SitterPackage::count() === 0) {
-                \Illuminate\Support\Facades\Artisan::call('db:seed', [
-                    '--class' => 'Database\Seeders\SitterPackageSeeder',
-                    '--force' => true
-                ]);
-            }
-            if (\App\Models\Sitter::count() === 0) {
-                \Illuminate\Support\Facades\Artisan::call('db:seed', [
-                    '--class' => 'Database\Seeders\SitterSeeder',
-                    '--force' => true
-                ]);
-            }
-            return response()->json(['message' => 'Seeding on production successful!']);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()]);
-        }
-    });
-
     // Webhook Route (Midtrans callback — no auth needed)
     Route::post('/midtrans/callback', [PaymentCallbackController::class, 'handleCallback']);
 
