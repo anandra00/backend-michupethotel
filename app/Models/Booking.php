@@ -9,6 +9,17 @@ class Booking extends Model
 {
     use SoftDeletes;
 
+    protected static function booted()
+    {
+        static::saved(function ($booking) {
+            \Illuminate\Support\Facades\Cache::forget('admin_reports_data');
+        });
+
+        static::deleted(function ($booking) {
+            \Illuminate\Support\Facades\Cache::forget('admin_reports_data');
+        });
+    }
+
     protected $fillable = [
         'user_id',
         'booking_type',

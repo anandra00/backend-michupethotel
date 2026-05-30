@@ -114,8 +114,8 @@ class BookingController extends Controller
                 Config::$isSanitized = true;
                 Config::$is3ds = true;
 
-                // SSL verification: enabled in production, disabled only in local dev
-                if (app()->environment('local')) {
+                // SSL verification: enabled in production, disabled only in local dev and testing
+                if (app()->environment('local', 'testing')) {
                     Config::$curlOptions = [
                         CURLOPT_SSL_VERIFYHOST => 0,
                         CURLOPT_SSL_VERIFYPEER => 0,
@@ -146,8 +146,8 @@ class BookingController extends Controller
                     $booking->update(['snap_token' => $snapToken]);
                 } catch (\Exception $e) {
                     \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
-                    if (app()->environment('local')) {
-                        // Fallback for local development so QA testing is not blocked by Midtrans credential issues
+                    if (app()->environment('local', 'testing')) {
+                        // Fallback for local/testing development so QA testing is not blocked by Midtrans credential issues
                         $booking->update(['snap_token' => 'dummy_token_local_testing_'.time()]);
                     } else {
                         // Throw to rollback the transaction
