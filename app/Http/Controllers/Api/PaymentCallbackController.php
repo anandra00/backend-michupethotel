@@ -11,6 +11,8 @@ class PaymentCallbackController extends Controller
 {
     public function handleCallback(Request $request)
     {
+        \Log::info('Midtrans Webhook Received', $request->all());
+
         $serverKey = config('services.midtrans.server_key');
         $hashed = hash('sha512', $request->order_id.$request->status_code.$request->gross_amount.$serverKey);
 
@@ -26,6 +28,7 @@ class PaymentCallbackController extends Controller
             }
 
             if (! $booking) {
+                \Log::warning("Midtrans Webhook: Booking not found for order ID: {$request->order_id}");
                 return response()->json(['message' => 'Booking not found'], 404);
             }
 
@@ -43,7 +46,7 @@ class PaymentCallbackController extends Controller
                         app(WhatsappService::class)->sendBookingConfirmation($booking);
                     }
                 } else {
-                    \Log::warning("Midtrans fraud detected for booking #{$bookingId}: fraud_status={$request->fraud_status}");
+                    \Log::warning("Midtrans fraud detected for booking #{$booking->id}: fraud_status={$request->fraud_status}");
                 }
             } elseif ($request->transaction_status == 'cancel' || $request->transaction_status == 'deny' || $request->transaction_status == 'expire') {
                 $booking->update(['payment_status' => 'failed', 'status' => 'cancelled']);
@@ -54,12 +57,17 @@ class PaymentCallbackController extends Controller
                 $booking->update([
                     'refund_status' => 'processed',
                 ]);
-                \Log::info("Midtrans refund confirmed for booking #{$bookingId}");
+                \Log::info("Midtrans refund confirmed for booking #{$booking->id}");
             }
 
             return response()->json(['message' => 'Callback handled successfully']);
         }
 
+        \Log::warning('Midtrans Webhook: Invalid signature', [
+            'received' => $request->signature_key,
+            'calculated' => $hashed,
+            'payload' => $request->all()
+        ]);
         return response()->json(['message' => 'Invalid signature'], 403);
     }
 }

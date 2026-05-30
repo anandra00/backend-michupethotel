@@ -144,6 +144,11 @@ class BookingController extends Controller
                         'email' => $user->email,
                         'phone' => $user->phone ?? '081234567890',
                     ],
+                    'callbacks' => [
+                        'finish' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
+                        'unfinish' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
+                        'error' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
+                    ],
                 ];
 
                 try {
@@ -196,6 +201,55 @@ class BookingController extends Controller
         }
 
         return response()->json($booking);
+    }
+
+    /**
+     * Verify payment status dynamically with Midtrans.
+     */
+    public function verifyPayment(Request $request, string $id)
+    {
+        $booking = Booking::findOrFail($id);
+        $user = Auth::user();
+
+        // Security check
+        if ($user->role !== 'admin' && $booking->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!$booking->midtrans_order_id) {
+            return response()->json(['message' => 'Booking belum memiliki ID pembayaran Midtrans.'], 400);
+        }
+
+        // Fetch current status from Midtrans
+        $midtransService = app(MidtransService::class);
+        $result = $midtransService->getTransactionStatus($booking->midtrans_order_id);
+
+        if ($result['success'] && isset($result['status'])) {
+            $status = $result['status'];
+            $oldPaymentStatus = $booking->payment_status;
+
+            if ($status === 'settlement' || ($status === 'capture' && ($result['data']['fraud_status'] ?? '') === 'accept')) {
+                if ($booking->payment_status !== 'paid') {
+                    $booking->update(['payment_status' => 'paid']);
+                    app(WhatsappService::class)->sendBookingConfirmation($booking);
+                }
+            } elseif (in_array($status, ['cancel', 'deny', 'expire'])) {
+                $booking->update(['payment_status' => 'failed', 'status' => 'cancelled']);
+            } elseif ($status === 'pending') {
+                $booking->update(['payment_status' => 'unpaid']);
+            }
+
+            return response()->json([
+                'message' => 'Status pembayaran berhasil diverifikasi.',
+                'booking' => $booking->fresh()->load(['user', 'room', 'sitter', 'cats']),
+                'midtrans_status' => $status,
+                'changed' => $oldPaymentStatus !== $booking->payment_status,
+            ]);
+        }
+
+        return response()->json([
+            'message' => $result['message'] ?? 'Gagal memeriksa status pembayaran di Midtrans.',
+        ], 400);
     }
 
     public function show(string $id)

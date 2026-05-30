@@ -108,4 +108,64 @@ class MidtransService
             ];
         }
     }
+
+    /**
+     * Fetch transaction status from Midtrans API.
+     *
+     * @param string $orderId The Midtrans order_id
+     * @return array{success: bool, status: string|null, data: mixed, message: string}
+     */
+    public function getTransactionStatus(string $orderId): array
+    {
+        if (app()->environment('local', 'testing') && str_starts_with($orderId, 'BKG-')) {
+            Log::info("MidtransService: Mock status check for order {$orderId}");
+            return [
+                'success' => true,
+                'status' => 'settlement',
+                'data' => [
+                    'status_code' => '200',
+                    'transaction_status' => 'settlement',
+                    'order_id' => $orderId,
+                    'fraud_status' => 'accept',
+                ],
+                'message' => 'Status transaksi settlement (mock)',
+            ];
+        }
+
+        try {
+            $response = Http::withBasicAuth($this->serverKey, '')
+                ->withOptions([
+                    'verify' => $this->isProduction,
+                ])
+                ->get("{$this->baseUrl}/{$orderId}/status");
+
+            $body = $response->json();
+
+            if ($response->successful() && isset($body['status_code'])) {
+                Log::info("MidtransService: Status check for {$orderId}", $body);
+                return [
+                    'success' => true,
+                    'status' => $body['transaction_status'] ?? null,
+                    'data' => $body,
+                    'message' => $body['status_message'] ?? 'Status berhasil diambil',
+                ];
+            }
+
+            Log::warning("MidtransService: Status check failed for {$orderId}", $body);
+            return [
+                'success' => false,
+                'status' => null,
+                'data' => $body,
+                'message' => $body['status_message'] ?? 'Gagal mengambil status dari Midtrans',
+            ];
+        } catch (\Exception $e) {
+            Log::error("MidtransService: Status check exception for {$orderId}: " . $e->getMessage());
+            return [
+                'success' => false,
+                'status' => null,
+                'data' => null,
+                'message' => 'Error saat memeriksa status: ' . $e->getMessage(),
+            ];
+        }
+    }
 }

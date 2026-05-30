@@ -61,6 +61,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/bookings/{booking}', [BookingController::class, 'show']);
         Route::put('/bookings/{booking}', [BookingController::class, 'update']);
         Route::put('/bookings/{booking}/pay-success', [BookingController::class, 'paySuccess']);
+        Route::post('/bookings/{booking}/verify-payment', [BookingController::class, 'verifyPayment']);
         Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancelBooking']);
         Route::post('/bookings/{booking}/sitter-checkin', [BookingController::class, 'sitterCheckin']);
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
