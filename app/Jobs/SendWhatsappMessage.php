@@ -14,13 +14,16 @@ class SendWhatsappMessage implements ShouldQueue
 
     public $message;
 
+    public $imageUrl;
+
     /**
      * Create a new job instance.
      */
-    public function __construct(string $phone, string $message)
+    public function __construct(string $phone, string $message, ?string $imageUrl = null)
     {
         $this->phone = $phone;
         $this->message = $message;
+        $this->imageUrl = $imageUrl;
     }
 
     /**
@@ -35,6 +38,9 @@ class SendWhatsappMessage implements ShouldQueue
             Log::info('=== MOCKED WHATSAPP MESSAGE (QUEUE) ===');
             Log::info("To: {$this->phone}");
             Log::info("Message: \n{$this->message}");
+            if ($this->imageUrl) {
+                Log::info("Media URL: {$this->imageUrl}");
+            }
             Log::info('===============================');
 
             return;
@@ -45,6 +51,15 @@ class SendWhatsappMessage implements ShouldQueue
 
             // Enable SSL verification in production, disable only in local dev
             $sslVerify = app()->environment('local') ? 0 : 2;
+
+            $postFields = [
+                'target' => $this->phone,
+                'message' => $this->message,
+                'countryCode' => '62',
+            ];
+            if ($this->imageUrl) {
+                $postFields['url'] = $this->imageUrl;
+            }
 
             curl_setopt_array($curl, [
                 CURLOPT_URL => 'https://api.fonnte.com/send',
@@ -57,11 +72,7 @@ class SendWhatsappMessage implements ShouldQueue
                 CURLOPT_CUSTOMREQUEST => 'POST',
                 CURLOPT_SSL_VERIFYHOST => $sslVerify,
                 CURLOPT_SSL_VERIFYPEER => $sslVerify ? true : false,
-                CURLOPT_POSTFIELDS => [
-                    'target' => $this->phone,
-                    'message' => $this->message,
-                    'countryCode' => '62',
-                ],
+                CURLOPT_POSTFIELDS => $postFields,
                 CURLOPT_HTTPHEADER => [
                     'Authorization: '.$token,
                 ],

@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\CatController;
 use App\Http\Controllers\Api\DailyReportController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentCallbackController;
+use App\Http\Controllers\Api\MessageController;
 use App\Http\Controllers\Api\RoomController;
 use App\Http\Controllers\Api\SitterController;
 use App\Http\Controllers\Api\SitterPackageController;
@@ -59,6 +60,10 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::put('/bookings/{booking}', [BookingController::class, 'update']);
         Route::put('/bookings/{booking}/pay-success', [BookingController::class, 'paySuccess']);
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
+
+        // Chat messages
+        Route::get('/bookings/{booking}/messages', [MessageController::class, 'index']);
+        Route::post('/bookings/{booking}/messages', [MessageController::class, 'store']);
 
         // Sitter Review
         Route::post('/bookings/{booking}/review', [BookingController::class, 'reviewSitter']);

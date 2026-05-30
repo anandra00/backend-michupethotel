@@ -23,12 +23,11 @@ class BookingController extends Controller
     {
         $this->bookingService = $bookingService;
     }
-
     public function index(Request $request)
     {
         $user = Auth::user();
 
-        $query = Booking::with(['user', 'room', 'sitter', 'sitterReview']);
+        $query = Booking::with(['user', 'room', 'sitter', 'sitterReview', 'cats']);
 
         if ($user->role !== 'admin') {
             $query->where('user_id', $user->id);
@@ -43,7 +42,6 @@ class BookingController extends Controller
 
         return response()->json($bookings);
     }
-
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -53,10 +51,21 @@ class BookingController extends Controller
             'sitter_package' => 'nullable|exists:sitter_packages,id',
             'check_in' => 'required|date',
             'check_out' => 'required|date|after_or_equal:check_in',
-            'total_cats' => 'required|integer|min:1',
+            'cat_ids' => 'required|array|min:1',
+            'cat_ids.*' => 'exists:cats,id',
             'notes' => 'nullable|string',
             'visit_time' => 'nullable|string|in:morning,afternoon,both,none',
         ]);
+
+        // Security & Ownership Guard: Verify that the selected cats belong to the authenticated user
+        $userCatCount = \App\Models\Cat::where('user_id', Auth::id())
+            ->whereIn('id', $validated['cat_ids'])
+            ->count();
+        if ($userCatCount !== count($validated['cat_ids'])) {
+            return response()->json(['message' => 'Salah satu kucing yang dipilih tidak valid atau bukan milik Anda.'], 422);
+        }
+
+        $validated['total_cats'] = count($validated['cat_ids']);
 
         try {
             return DB::transaction(function () use ($validated) {
@@ -95,6 +104,9 @@ class BookingController extends Controller
                     'status' => 'pending',
                     'notes' => $validated['notes'] ?? null,
                 ]);
+
+                // Sync the selected cats pivot relation
+                $booking->cats()->sync($validated['cat_ids']);
 
                 // --- MIDTRANS INTEGRATION ---
                 Config::$serverKey = config('services.midtrans.server_key');
@@ -155,7 +167,7 @@ class BookingController extends Controller
                     ));
                 }
 
-                return response()->json($booking->load(['user', 'room', 'sitter']), 201);
+                return response()->json($booking->load(['user', 'room', 'sitter', 'cats']), 201);
             });
         } catch (\Exception $e) {
             return response()->json(['message' => 'Gagal memproses pesanan: ' . $e->getMessage()], 500);
@@ -182,7 +194,7 @@ class BookingController extends Controller
 
     public function show(string $id)
     {
-        $booking = Booking::with(['user', 'room', 'sitter', 'sitterReview'])->findOrFail($id);
+        $booking = Booking::with(['user', 'room', 'sitter', 'sitterReview', 'cats'])->findOrFail($id);
 
         if (Auth::user()->role !== 'admin' && $booking->user_id !== Auth::id()) {
             return response()->json(['message' => 'Unauthorized'], 403);

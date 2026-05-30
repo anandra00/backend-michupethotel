@@ -12,7 +12,7 @@ class WhatsappService
     /**
      * Send a WhatsApp message using Fonnte API or fallback to logs.
      */
-    public function sendMessage(string $phone, string $message): bool
+    public function sendMessage(string $phone, string $message, ?string $imageUrl = null): bool
     {
         $token = config('services.fonnte.token');
 
@@ -21,13 +21,16 @@ class WhatsappService
             Log::info('=== MOCKED WHATSAPP MESSAGE ===');
             Log::info("To: {$phone}");
             Log::info("Message: \n{$message}");
+            if ($imageUrl) {
+                Log::info("Media URL: {$imageUrl}");
+            }
             Log::info('===============================');
 
             return true;
         }
 
         // Dispatch to queue instead of sending synchronously
-        SendWhatsappMessage::dispatch($phone, $message);
+        SendWhatsappMessage::dispatch($phone, $message, $imageUrl);
 
         return true;
     }
@@ -164,7 +167,12 @@ class WhatsappService
             $msg .= "Cek foto lucu dan detail lengkapnya di dashboard aplikasi Michu MeowStay ya!\n\n";
             $msg .= '_Michu MeowStay — Rumah Kedua Anabulmu_';
 
-            $this->sendMessage($user->phone, $msg);
+            $imageUrl = null;
+            if ($report->photo_path) {
+                $imageUrl = \Illuminate\Support\Facades\Storage::disk('public')->url($report->photo_path);
+            }
+
+            $this->sendMessage($user->phone, $msg, $imageUrl);
         }
     }
 }

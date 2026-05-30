@@ -45,4 +45,14 @@ class Booking extends Model
     {
         return $this->hasOne(SitterReview::class);
     }
+
+    public function cats()
+    {
+        return $this->belongsToMany(Cat::class, 'booking_cat');
+    }
+
+    public function messages()
+    {
+        return $this->hasMany(Message::class);
+    }
 }
