@@ -56,6 +56,10 @@ class NotificationController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
+        if ($user->role !== 'admin') {
+            return response()->json(['message' => 'Hanya administrator yang diizinkan mengirim notifikasi uji coba.'], 403);
+        }
+
         $user->notify(new \App\Notifications\AppNotification(
             'Uji Coba Notifikasi 🔔',
             'Halo ' . $user->name . ', notifikasi real-time uji coba Anda berhasil dikirim!',
