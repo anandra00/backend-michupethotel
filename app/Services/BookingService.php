@@ -72,6 +72,20 @@ class BookingService
         $setting = Setting::where('key', 'admin_fee')->first();
         $adminFee = $setting ? (float) $setting->value : 5000;
 
-        return ($days * $package->price * $totalCats) + $adminFee;
+        // Tiered pricing matching frontend rules:
+        // 1-2 cats: 60k for 1x, 120k for 2x
+        // 3-4 cats: 80k for 1x, 160k for 2x
+        // 5+ cats: 120k for 1x, 240k for 2x
+        $is2x = str_contains($package->name, '2x');
+        $basePrice = 60000;
+        if ($totalCats >= 3 && $totalCats <= 4) {
+            $basePrice = 80000;
+        } elseif ($totalCats >= 5) {
+            $basePrice = 120000;
+        }
+
+        $pricePerDay = $is2x ? $basePrice * 2 : $basePrice;
+
+        return ($days * $pricePerDay) + $adminFee;
     }
 }
