@@ -33,10 +33,19 @@ Route::middleware(['throttle:60,1'])->group(function () {
             $db = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
             $tables = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
             $notificationsCount = \Illuminate\Support\Facades\DB::table('notifications')->count();
+            
+            $logPath = storage_path('logs/laravel.log');
+            $logs = 'No log file found';
+            if (file_exists($logPath)) {
+                $lines = file($logPath);
+                $logs = array_slice($lines, -50);
+            }
+
             return response()->json([
                 'database' => $db,
                 'tables' => $tables,
                 'notifications_count' => $notificationsCount,
+                'logs' => $logs
             ]);
         } catch (\Exception $e) {
             return response()->json([
