@@ -28,6 +28,24 @@ Route::middleware(['throttle:60,1'])->group(function () {
     // Public Settings
     Route::get('/settings', [SettingController::class, 'index']);
 
+    Route::get('/debug-production', function () {
+        try {
+            $db = \Illuminate\Support\Facades\DB::connection()->getDatabaseName();
+            $tables = \Illuminate\Support\Facades\DB::select('SHOW TABLES');
+            $notificationsCount = \Illuminate\Support\Facades\DB::table('notifications')->count();
+            return response()->json([
+                'database' => $db,
+                'tables' => $tables,
+                'notifications_count' => $notificationsCount,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
+        }
+    });
+
     // Webhook Route (Midtrans callback — no auth needed)
     Route::post('/midtrans/callback', [PaymentCallbackController::class, 'handleCallback']);
 
