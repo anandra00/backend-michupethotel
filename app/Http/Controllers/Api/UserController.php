@@ -23,6 +23,8 @@ class UserController extends Controller
             'phone' => 'sometimes|nullable|string|max:20',
             'email' => 'sometimes|required|email|unique:users,email,'.$user->id,
             'address' => 'sometimes|nullable|string|max:500',
+            'latitude' => 'sometimes|nullable|numeric|between:-90,90',
+            'longitude' => 'sometimes|nullable|numeric|between:-180,180',
             'password' => ['sometimes', 'nullable', 'confirmed', Password::min(8)->mixedCase()->numbers()->symbols()],
         ]);
 

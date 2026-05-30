@@ -48,6 +48,12 @@ class PaymentCallbackController extends Controller
                 $booking->update(['payment_status' => 'failed', 'status' => 'cancelled']);
             } elseif ($request->transaction_status == 'pending') {
                 $booking->update(['payment_status' => 'unpaid']);
+            } elseif ($request->transaction_status == 'refund' || $request->transaction_status == 'partial_refund') {
+                // Midtrans refund webhook — update booking refund status
+                $booking->update([
+                    'refund_status' => 'processed',
+                ]);
+                \Log::info("Midtrans refund confirmed for booking #{$bookingId}");
             }
 
             return response()->json(['message' => 'Callback handled successfully']);

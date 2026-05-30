@@ -4,15 +4,17 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Booking;
+use App\Models\Coupon;
 use App\Models\SitterReview;
 use App\Models\User;
 use App\Notifications\AppNotification;
 use App\Services\BookingService;
+use App\Services\GpsService;
+use App\Services\MidtransService;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Midtrans\Config;
 use Midtrans\Snap;
 
 class BookingController extends Controller
@@ -55,6 +57,7 @@ class BookingController extends Controller
             'cat_ids.*' => 'exists:cats,id',
             'notes' => 'nullable|string',
             'visit_time' => 'nullable|string|in:morning,afternoon,both,none',
+            'coupon_code' => 'nullable|string|max:50',
         ]);
 
         // Security & Ownership Guard: Verify that the selected cats belong to the authenticated user
@@ -88,6 +91,22 @@ class BookingController extends Controller
                     $totalPrice = $this->bookingService->calculateSitterPrice($validated['sitter_package'], $validated['check_in'], $validated['check_out'], $validated['total_cats']);
                 }
 
+                // --- COUPON DISCOUNT ---
+                $couponId = null;
+                $discountAmount = 0;
+                if (! empty($validated['coupon_code'])) {
+                    $coupon = Coupon::where('code', strtoupper($validated['coupon_code']))->first();
+                    if ($coupon && $coupon->isUsable()) {
+                        $discountAmount = $coupon->calculateDiscount($totalPrice);
+                        if ($discountAmount > 0) {
+                            $couponId = $coupon->id;
+                            $totalPrice = max(0, $totalPrice - $discountAmount);
+                            $coupon->increment('used_count');
+                        }
+                    }
+                }
+                // --- END COUPON DISCOUNT ---
+
                 $user = Auth::user();
 
                 $booking = Booking::create([
@@ -96,10 +115,12 @@ class BookingController extends Controller
                     'room_id' => $validated['booking_type'] === 'board' ? $validated['room_id'] : null,
                     'sitter_id' => $validated['sitter_id'] ?? null,
                     'sitter_package' => $validated['sitter_package'] ?? null,
+                    'coupon_id' => $couponId,
                     'check_in' => $validated['check_in'],
                     'check_out' => $validated['check_out'],
                     'total_cats' => $validated['total_cats'],
                     'total_price' => $totalPrice,
+                    'discount_amount' => $discountAmount,
                     'visit_time' => $validated['visit_time'] ?? 'none',
                     'status' => 'pending',
                     'notes' => $validated['notes'] ?? null,
@@ -109,29 +130,13 @@ class BookingController extends Controller
                 $booking->cats()->sync($validated['cat_ids']);
 
                 // --- MIDTRANS INTEGRATION ---
-                Config::$serverKey = config('services.midtrans.server_key');
-                Config::$isProduction = config('services.midtrans.is_production', false);
-                Config::$isSanitized = true;
-                Config::$is3ds = true;
+                $midtransService = app(MidtransService::class);
+                $midtransService->configureSnap();
 
-                // SSL verification: enabled in production, disabled only in local dev and testing
-                if (app()->environment('local', 'testing')) {
-                    Config::$curlOptions = [
-                        CURLOPT_SSL_VERIFYHOST => 0,
-                        CURLOPT_SSL_VERIFYPEER => 0,
-                        CURLOPT_HTTPHEADER => [],
-                    ];
-                } else {
-                    Config::$curlOptions = [
-                        CURLOPT_SSL_VERIFYHOST => 2,
-                        CURLOPT_SSL_VERIFYPEER => 1,
-                        CURLOPT_HTTPHEADER => [],
-                    ];
-                }
-
+                $orderId = 'BKG-'.$booking->id.'-'.time();
                 $params = [
                     'transaction_details' => [
-                        'order_id' => 'BKG-'.$booking->id.'-'.time(),
+                        'order_id' => $orderId,
                         'gross_amount' => $totalPrice,
                     ],
                     'customer_details' => [
@@ -143,14 +148,15 @@ class BookingController extends Controller
 
                 try {
                     $snapToken = Snap::getSnapToken($params);
-                    $booking->update(['snap_token' => $snapToken]);
+                    $booking->update(['snap_token' => $snapToken, 'midtrans_order_id' => $orderId]);
                 } catch (\Exception $e) {
                     \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
                     if (app()->environment('local', 'testing')) {
-                        // Fallback for local/testing development so QA testing is not blocked by Midtrans credential issues
-                        $booking->update(['snap_token' => 'dummy_token_local_testing_'.time()]);
+                        $booking->update([
+                            'snap_token' => 'dummy_token_local_testing_'.time(),
+                            'midtrans_order_id' => $orderId,
+                        ]);
                     } else {
-                        // Throw to rollback the transaction
                         throw $e;
                     }
                 }
@@ -231,6 +237,11 @@ class BookingController extends Controller
         $booking->update($validated);
 
         if (isset($validated['status']) && $user->role === 'admin') {
+            // Auto-refund when admin cancels a paid booking
+            if ($validated['status'] === 'cancelled' && $booking->payment_status === 'paid') {
+                $this->processRefund($booking);
+            }
+
             $statusLabels = [
                 'approved' => 'disetujui',
                 'rejected' => 'ditolak',
@@ -248,7 +259,7 @@ class BookingController extends Controller
             ));
         }
 
-        return response()->json($booking->load(['user', 'room', 'sitter']));
+        return response()->json($booking->load(['user', 'room', 'sitter', 'coupon']));
     }
 
     public function destroy(string $id)
@@ -314,5 +325,202 @@ class BookingController extends Controller
         ]);
 
         return response()->json($review->load(['user', 'sitter']), 201);
+    }
+
+    /**
+     * User-initiated booking cancellation with auto-refund.
+     */
+    public function cancelBooking(Request $request, Booking $booking)
+    {
+        $user = Auth::user();
+
+        // User can only cancel their own bookings
+        if ($user->role !== 'admin' && $booking->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Can only cancel pending or approved bookings
+        if (! in_array($booking->status, ['pending', 'approved'])) {
+            return response()->json(['message' => 'Booking ini tidak bisa dibatalkan'], 422);
+        }
+
+        $refundInfo = null;
+
+        // Process refund if the booking was already paid
+        if ($booking->payment_status === 'paid') {
+            $refundInfo = $this->processRefund($booking);
+        }
+
+        $booking->update([
+            'status' => 'cancelled',
+            'cancelled_at' => now(),
+        ]);
+
+        // Notify user
+        $refundMsg = '';
+        if ($booking->payment_status === 'paid') {
+            if ($booking->refund_status === 'pending' || $booking->refund_status === 'processed') {
+                $refundMsg = ' Refund sebesar Rp ' . number_format($booking->refund_amount, 0, ',', '.') . ' sedang diproses.';
+            } else {
+                $refundMsg = ' Pembatalan dilakukan kurang dari H-2, tidak ada refund.';
+            }
+        }
+
+        $booking->user->notify(new AppNotification(
+            'Pesanan Dibatalkan',
+            "Pesanan Anda ({$booking->booking_type}) telah dibatalkan.{$refundMsg}",
+            'error',
+            '/dashboard/history'
+        ));
+
+        // Notify admins
+        $admins = User::where('role', 'admin')->get();
+        foreach ($admins as $admin) {
+            $admin->notify(new AppNotification(
+                'Pesanan Dibatalkan',
+                "Pesanan ({$booking->booking_type}) dari {$booking->user->name} telah dibatalkan.",
+                'warning',
+                '/admin/reservations'
+            ));
+        }
+
+        return response()->json([
+            'message' => 'Pesanan berhasil dibatalkan' . $refundMsg,
+            'booking' => $booking->fresh()->load(['user', 'room', 'sitter', 'coupon']),
+            'refund' => $refundInfo,
+        ]);
+    }
+
+    /**
+     * GPS-verified sitter check-in.
+     */
+    public function sitterCheckin(Request $request, Booking $booking)
+    {
+        $user = Auth::user();
+
+        // Only admin can perform sitter check-in (sitters don't have accounts yet, admin operates)
+        // OR if we expand: the booking owner/sitter can check in
+        if ($user->role !== 'admin' && $booking->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Must be a sitter booking
+        if ($booking->booking_type !== 'sitter') {
+            return response()->json(['message' => 'Fitur check-in GPS hanya untuk layanan sitter'], 422);
+        }
+
+        // Must be approved
+        if ($booking->status !== 'approved') {
+            return response()->json(['message' => 'Booking harus berstatus approved untuk check-in'], 422);
+        }
+
+        $validated = $request->validate([
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+        ]);
+
+        // Get customer's saved location
+        $customer = $booking->user;
+        if (! $customer->latitude || ! $customer->longitude) {
+            return response()->json([
+                'message' => 'Pelanggan belum menyimpan lokasi di profil. Minta pelanggan update lokasi terlebih dahulu.',
+            ], 422);
+        }
+
+        $gpsService = app(GpsService::class);
+        $radius = $gpsService->getRadius();
+        $result = $gpsService->isWithinRadius(
+            $validated['latitude'],
+            $validated['longitude'],
+            $customer->latitude,
+            $customer->longitude,
+            $radius
+        );
+
+        $booking->update([
+            'checkin_lat' => $validated['latitude'],
+            'checkin_lng' => $validated['longitude'],
+            'checkin_distance_m' => $result['distance'],
+            'checkin_verified' => $result['within'],
+        ]);
+
+        if ($result['within']) {
+            $booking->update(['status' => 'checked_in']);
+
+            $booking->user->notify(new AppNotification(
+                'Sitter Check-in Berhasil ✅',
+                "Sitter telah check-in di lokasi Anda (jarak: {$result['distance']}m). Kunjungan dimulai!",
+                'success',
+                '/dashboard/history'
+            ));
+
+            return response()->json([
+                'message' => 'Check-in berhasil! Lokasi terverifikasi.',
+                'verified' => true,
+                'distance' => $result['distance'],
+                'radius' => $radius,
+                'booking' => $booking->fresh()->load(['user', 'room', 'sitter']),
+            ]);
+        }
+
+        return response()->json([
+            'message' => "Lokasi tidak terverifikasi. Jarak Anda {$result['distance']}m dari lokasi pelanggan (maks. {$radius}m).",
+            'verified' => false,
+            'distance' => $result['distance'],
+            'radius' => $radius,
+        ], 422);
+    }
+
+    /**
+     * Process refund for a booking based on H-2 policy.
+     */
+    private function processRefund(Booking $booking): array
+    {
+        if (! $booking->isRefundEligible()) {
+            $booking->update([
+                'refund_status' => 'failed',
+                'refund_amount' => 0,
+                'cancelled_at' => now(),
+            ]);
+            return [
+                'eligible' => false,
+                'reason' => 'Pembatalan kurang dari H-2, tidak ada refund',
+            ];
+        }
+
+        $refundAmount = (int) $booking->total_price;
+        $booking->update([
+            'refund_status' => 'pending',
+            'refund_amount' => $refundAmount,
+            'cancelled_at' => now(),
+        ]);
+
+        // Call Midtrans refund API
+        if ($booking->midtrans_order_id) {
+            $midtransService = app(MidtransService::class);
+            $result = $midtransService->refundTransaction(
+                $booking->midtrans_order_id,
+                $refundAmount,
+                'Pembatalan oleh pelanggan (H-2 policy)'
+            );
+
+            if ($result['success']) {
+                $booking->update(['refund_status' => 'processed']);
+            } else {
+                \Log::warning('Refund API failed for booking #' . $booking->id, $result);
+            }
+
+            return [
+                'eligible' => true,
+                'amount' => $refundAmount,
+                'midtrans_result' => $result,
+            ];
+        }
+
+        return [
+            'eligible' => true,
+            'amount' => $refundAmount,
+            'midtrans_result' => null,
+        ];
     }
 }

@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\SitterController;
 use App\Http\Controllers\Api\SitterPackageController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VisitServiceController;
+use App\Http\Controllers\Api\CouponController;
 use App\Http\Controllers\SettingController;
 use App\Http\Middleware\IsAdmin;
 use Illuminate\Support\Facades\Route;
@@ -59,7 +60,12 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/bookings/{booking}', [BookingController::class, 'show']);
         Route::put('/bookings/{booking}', [BookingController::class, 'update']);
         Route::put('/bookings/{booking}/pay-success', [BookingController::class, 'paySuccess']);
+        Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancelBooking']);
+        Route::post('/bookings/{booking}/sitter-checkin', [BookingController::class, 'sitterCheckin']);
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
+
+        // Coupons validation (user-facing)
+        Route::post('/coupons/validate', [CouponController::class, 'validateCoupon']);
 
         // Chat messages
         Route::get('/bookings/{booking}/messages', [MessageController::class, 'index']);
@@ -80,6 +86,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
             Route::get('/admin/reports', [AdminController::class, 'reports']);
             Route::get('/admin/cats', [AdminController::class, 'cats']); // NEW ROUTE
             Route::apiResource('admin/rooms', RoomController::class)->except(['index', 'show']);
+            Route::apiResource('admin/coupons', CouponController::class);
             Route::get('/admin/sitters/{id}/schedule', [SitterController::class, 'schedule']);
             Route::apiResource('admin/sitters', SitterController::class);
 
