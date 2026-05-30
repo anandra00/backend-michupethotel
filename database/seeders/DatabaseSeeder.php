@@ -218,5 +218,10 @@ class DatabaseSeeder extends Seeder
             'status' => 'pending',
             'notes' => 'Perlu kamar yang bisa untuk 2 kucing.',
         ]);
+
+        $this->call([
+            SitterPackageSeeder::class,
+            SitterSeeder::class,
+        ]);
     }
 }
