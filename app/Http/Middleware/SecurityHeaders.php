@@ -37,14 +37,13 @@ class SecurityHeaders
         }
 
         // Content-Security-Policy for defense-in-depth (M-07)
-        $backendUrl = "https://backend-michupethotel-production.up.railway.app";
         $response->headers->set('Content-Security-Policy', 
             "default-src 'self'; " .
             "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.sandbox.midtrans.com https://app.midtrans.com; " .
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
             "font-src 'self' https://fonts.gstatic.com; " .
             "img-src 'self' data: https://images.unsplash.com https://api.dicebear.com blob:; " .
-            "connect-src 'self' https://api.sandbox.midtrans.com https://api.midtrans.com {$backendUrl} " . config('app.frontend_url', 'https://frontend-sage-theta.vercel.app')
+            "connect-src 'self' https://*.midtrans.com https://michu-backend-production.up.railway.app https://*.vercel.app http://localhost:*"
         );
 
         // Remove server identification header

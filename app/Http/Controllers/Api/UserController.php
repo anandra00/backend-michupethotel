@@ -37,7 +37,7 @@ class UserController extends Controller
 
         $user->update($validated);
 
-        return new UserResource($user);
+        return response()->json((new UserResource($user))->resolve());
     }
 
     public function stats(Request $request)

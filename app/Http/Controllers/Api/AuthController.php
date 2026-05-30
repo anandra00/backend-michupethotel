@@ -33,7 +33,7 @@ class AuthController extends Controller
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => new UserResource($user),
+            'user' => (new UserResource($user))->resolve(),
         ]);
     }
 
@@ -57,7 +57,7 @@ class AuthController extends Controller
         return response()->json([
             'access_token' => $token,
             'token_type' => 'Bearer',
-            'user' => new UserResource($user),
+            'user' => (new UserResource($user))->resolve(),
         ]);
     }
 
@@ -72,6 +72,6 @@ class AuthController extends Controller
 
     public function user(Request $request)
     {
-        return new UserResource($request->user());
+        return response()->json((new UserResource($request->user()))->resolve());
     }
 }
