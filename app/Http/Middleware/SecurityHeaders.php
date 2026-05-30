@@ -43,7 +43,7 @@ class SecurityHeaders
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
             "font-src 'self' https://fonts.gstatic.com; " .
             "img-src 'self' data: https://images.unsplash.com https://api.dicebear.com blob:; " .
-            "connect-src 'self' https://*.midtrans.com https://michu-backend-production.up.railway.app https://*.vercel.app http://localhost:*"
+            "connect-src 'self' https://*.midtrans.com https://michu-backend-production.up.railway.app https://backend-michupethotel-production.up.railway.app https://*.vercel.app http://localhost:*"
         );
 
         // Remove server identification header
