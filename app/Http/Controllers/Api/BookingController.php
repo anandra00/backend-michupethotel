@@ -372,19 +372,21 @@ class BookingController extends Controller
             }
         }
 
-        $booking->user->notify(new AppNotification(
-            'Pesanan Dibatalkan',
-            "Pesanan Anda ({$booking->booking_type}) telah dibatalkan.{$refundMsg}",
-            'error',
-            '/dashboard/history'
-        ));
+        if ($booking->user) {
+            $booking->user->notify(new AppNotification(
+                'Pesanan Dibatalkan',
+                "Pesanan Anda ({$booking->booking_type}) telah dibatalkan.{$refundMsg}",
+                'error',
+                '/dashboard/history'
+            ));
+        }
 
         // Notify admins
         $admins = User::where('role', 'admin')->get();
         foreach ($admins as $admin) {
             $admin->notify(new AppNotification(
                 'Pesanan Dibatalkan',
-                "Pesanan ({$booking->booking_type}) dari {$booking->user->name} telah dibatalkan.",
+                "Pesanan ({$booking->booking_type}) dari " . ($booking->user->name ?? 'Pelanggan') . " telah dibatalkan.",
                 'warning',
                 '/admin/reservations'
             ));

@@ -9,15 +9,25 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
         // Standard production practice: Paginate notifications to prevent out-of-memory errors
-        $notifications = $request->user()->notifications()->paginate(20);
+        $notifications = $user->notifications()->paginate(20);
 
         return response()->json($notifications);
     }
 
     public function markAsRead(Request $request, $id)
     {
-        $notification = $request->user()->notifications()->find($id);
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $notification = $user->notifications()->find($id);
         if ($notification) {
             $notification->markAsRead();
 
@@ -29,7 +39,12 @@ class NotificationController extends Controller
 
     public function markAllAsRead(Request $request)
     {
-        $request->user()->unreadNotifications->markAsRead();
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $user->unreadNotifications->markAsRead();
 
         return response()->json(['message' => 'Semua telah dibaca']);
     }
