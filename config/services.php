@@ -42,4 +42,9 @@ return [
         'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
     ],
 
+    'fonnte' => [
+        'token' => env('FONNTE_TOKEN'),
+        'admin_phone' => env('ADMIN_PHONE'),
+    ],
+
 ];

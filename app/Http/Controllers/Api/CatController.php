@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Cat;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
 
 class CatController extends Controller
 {
@@ -68,6 +69,10 @@ class CatController extends Controller
         }
 
         if ($request->hasFile('photo')) {
+            // Delete old photo if it exists to prevent storage leaks
+            if ($cat->photo) {
+                Storage::disk('public')->delete($cat->photo);
+            }
             $validated['photo'] = $request->file('photo')->store('cats', 'public');
         }
 
@@ -82,6 +87,12 @@ class CatController extends Controller
     public function destroy(string $id)
     {
         $cat = Cat::where('user_id', Auth::id())->findOrFail($id);
+
+        // Delete photo if it exists to prevent storage leaks
+        if ($cat->photo) {
+            Storage::disk('public')->delete($cat->photo);
+        }
+
         $cat->delete();
 
         return response()->json(['message' => 'Cat deleted successfully']);

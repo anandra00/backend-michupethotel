@@ -14,7 +14,7 @@ class WhatsappService
      */
     public function sendMessage(string $phone, string $message): bool
     {
-        $token = env('FONNTE_TOKEN');
+        $token = config('services.fonnte.token');
 
         if (empty($token)) {
             // Fallback to logs if no Fonnte token is set
@@ -94,7 +94,7 @@ class WhatsappService
         }
 
         // --- MESSAGE TO ADMIN ---
-        $adminPhone = env('ADMIN_PHONE', '085885929383');
+        $adminPhone = config('services.fonnte.admin_phone');
         $adminMsg = "💰 *PEMBAYARAN DITERIMA!* 💰\n\n";
         $adminMsg .= "Pesanan baru telah LUNAS dan siap diproses.\n\n";
         $adminMsg .= "━━━━━━━━━━━━━━━━━━━━\n";
@@ -135,7 +135,11 @@ class WhatsappService
 
         $adminMsg .= "\nSegera cek dan proses pesanan ini di dashboard admin! 🚀";
 
-        $this->sendMessage($adminPhone, $adminMsg);
+        if (!empty($adminPhone)) {
+            $this->sendMessage($adminPhone, $adminMsg);
+        } else {
+            Log::info('Admin WhatsApp notification skipped: ADMIN_PHONE environment variable is empty or not configured.');
+        }
     }
 
     public function sendDailyReportNotification(DailyReport $report): void

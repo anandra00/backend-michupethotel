@@ -17,10 +17,13 @@ class SanitizeInput
         $input = $request->all();
         array_walk_recursive($input, function (&$value) {
             if (is_string($value)) {
-                // Strip HTML tags to prevent stored XSS
-                $value = strip_tags($value);
                 // Remove null bytes (can bypass filters)
                 $value = str_replace(chr(0), '', $value);
+                
+                // Advanced sanitization: Only remove dangerous HTML tags/attributes (script, iframe, style, event handlers)
+                // to prevent XSS without corrupting innocent user input like "< 1 tahun" or "notes <like this>"
+                $value = preg_replace('/<(script|iframe|style|embed|object|applet)[^>]*?>.*?<\/\1>/si', '', $value);
+                $value = preg_replace('/(<[^>]+?)(?:\s+on[a-zA-Z]+\s*=\s*["\'].*?["\']|\s+href\s*=\s*["\']\s*javascript\s*:.*?["\'])([^>]*?>)/si', '$1$2', $value);
             }
         });
         $request->merge($input);

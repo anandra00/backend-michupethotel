@@ -28,7 +28,7 @@ class SendWhatsappMessage implements ShouldQueue
      */
     public function handle(): void
     {
-        $token = env('FONNTE_TOKEN');
+        $token = config('services.fonnte.token');
 
         if (empty($token)) {
             // Fallback to logs if no Fonnte token is set
@@ -43,18 +43,20 @@ class SendWhatsappMessage implements ShouldQueue
         try {
             $curl = curl_init();
 
+            // Enable SSL verification in production, disable only in local dev
+            $sslVerify = app()->environment('local') ? 0 : 2;
+
             curl_setopt_array($curl, [
                 CURLOPT_URL => 'https://api.fonnte.com/send',
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_ENCODING => '',
                 CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 0,
+                CURLOPT_TIMEOUT => 30, // 30 second timeout to prevent queue worker hangs
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
                 CURLOPT_CUSTOMREQUEST => 'POST',
-                // Important: disables SSL checks on local Windows machines
-                CURLOPT_SSL_VERIFYHOST => 0,
-                CURLOPT_SSL_VERIFYPEER => 0,
+                CURLOPT_SSL_VERIFYHOST => $sslVerify,
+                CURLOPT_SSL_VERIFYPEER => $sslVerify ? true : false,
                 CURLOPT_POSTFIELDS => [
                     'target' => $this->phone,
                     'message' => $this->message,

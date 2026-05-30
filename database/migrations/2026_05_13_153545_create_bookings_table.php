@@ -14,13 +14,14 @@ return new class extends Migration
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('room_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('room_id')->nullable()->constrained()->nullOnDelete();
             $table->date('check_in');
             $table->date('check_out');
             $table->integer('total_cats');
             $table->decimal('total_price', 10, 2);
             $table->enum('status', ['pending', 'approved', 'rejected', 'checked_in', 'checked_out', 'cancelled'])->default('pending');
             $table->text('notes')->nullable();
+            $table->softDeletes();
             $table->timestamps();
         });
     }

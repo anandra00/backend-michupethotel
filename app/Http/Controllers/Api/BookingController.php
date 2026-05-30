@@ -11,6 +11,7 @@ use App\Services\BookingService;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Midtrans\Config;
 use Midtrans\Snap;
 
@@ -37,7 +38,8 @@ class BookingController extends Controller
             $query->where('status', $request->status);
         }
 
-        $bookings = $query->orderBy('created_at', 'desc')->get();
+        // Standard production practice: Paginate responses to prevent out-of-memory errors
+        $bookings = $query->orderBy('created_at', 'desc')->paginate(20);
 
         return response()->json($bookings);
     }
@@ -56,111 +58,116 @@ class BookingController extends Controller
             'visit_time' => 'nullable|string|in:morning,afternoon,both,none',
         ]);
 
-        $totalPrice = 0;
-
-        if ($validated['booking_type'] === 'board') {
-            if (! $this->bookingService->isRoomAvailable($validated['room_id'], $validated['check_in'], $validated['check_out'])) {
-                return response()->json([
-                    'message' => 'Kamar ini sudah di-booking pada tanggal tersebut.',
-                ], 422);
-            }
-            $totalPrice = $this->bookingService->calculateBoardingPrice($validated['room_id'], $validated['check_in'], $validated['check_out']);
-        } else {
-            $visitTime = $validated['visit_time'] ?? 'none';
-            if (! $this->bookingService->isSitterAvailable($validated['sitter_id'], $validated['check_in'], $validated['check_out'], $visitTime)) {
-                return response()->json([
-                    'message' => 'Sitter ini sudah memiliki jadwal penuh (bentrok) pada tanggal dan shift tersebut.',
-                ], 422);
-            }
-            $totalPrice = $this->bookingService->calculateSitterPrice($validated['sitter_package'], $validated['check_in'], $validated['check_out'], $validated['total_cats']);
-        }
-
-        $user = Auth::user();
-
-        $booking = Booking::create([
-            'user_id' => $user->id,
-            'booking_type' => $validated['booking_type'],
-            'room_id' => $validated['booking_type'] === 'board' ? $validated['room_id'] : null,
-            'sitter_id' => $validated['sitter_id'] ?? null,
-            'sitter_package' => $validated['sitter_package'] ?? null,
-            'check_in' => $validated['check_in'],
-            'check_out' => $validated['check_out'],
-            'total_cats' => $validated['total_cats'],
-            'total_price' => $totalPrice,
-            'visit_time' => $validated['visit_time'] ?? 'none',
-            'status' => 'pending',
-            'notes' => $validated['notes'] ?? null,
-        ]);
-
-        // --- MIDTRANS INTEGRATION ---
-        Config::$serverKey = config('services.midtrans.server_key');
-        Config::$isProduction = config('services.midtrans.is_production', false);
-        Config::$isSanitized = true;
-        Config::$is3ds = true;
-
-        // SSL verification: enabled in production, disabled only in local dev
-        if (app()->environment('local')) {
-            Config::$curlOptions = [
-                CURLOPT_SSL_VERIFYHOST => 0,
-                CURLOPT_SSL_VERIFYPEER => 0,
-                CURLOPT_HTTPHEADER => [],
-            ];
-        } else {
-            Config::$curlOptions = [
-                CURLOPT_SSL_VERIFYHOST => 2,
-                CURLOPT_SSL_VERIFYPEER => 1,
-                CURLOPT_HTTPHEADER => [],
-            ];
-        }
-
-        $params = [
-            'transaction_details' => [
-                'order_id' => 'BKG-'.$booking->id.'-'.time(),
-                'gross_amount' => $totalPrice,
-            ],
-            'customer_details' => [
-                'first_name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone ?? '081234567890',
-            ],
-        ];
-
         try {
-            $snapToken = Snap::getSnapToken($params);
-            $booking->update(['snap_token' => $snapToken]);
+            return DB::transaction(function () use ($validated) {
+                $totalPrice = 0;
+
+                if ($validated['booking_type'] === 'board') {
+                    if (! $this->bookingService->isRoomAvailable($validated['room_id'], $validated['check_in'], $validated['check_out'])) {
+                        return response()->json([
+                            'message' => 'Kamar ini sudah di-booking pada tanggal tersebut.',
+                        ], 422);
+                    }
+                    $totalPrice = $this->bookingService->calculateBoardingPrice($validated['room_id'], $validated['check_in'], $validated['check_out']);
+                } else {
+                    $visitTime = $validated['visit_time'] ?? 'none';
+                    if (! $this->bookingService->isSitterAvailable($validated['sitter_id'], $validated['check_in'], $validated['check_out'], $visitTime)) {
+                        return response()->json([
+                            'message' => 'Sitter ini sudah memiliki jadwal penuh (bentrok) pada tanggal dan shift tersebut.',
+                        ], 422);
+                    }
+                    $totalPrice = $this->bookingService->calculateSitterPrice($validated['sitter_package'], $validated['check_in'], $validated['check_out'], $validated['total_cats']);
+                }
+
+                $user = Auth::user();
+
+                $booking = Booking::create([
+                    'user_id' => $user->id,
+                    'booking_type' => $validated['booking_type'],
+                    'room_id' => $validated['booking_type'] === 'board' ? $validated['room_id'] : null,
+                    'sitter_id' => $validated['sitter_id'] ?? null,
+                    'sitter_package' => $validated['sitter_package'] ?? null,
+                    'check_in' => $validated['check_in'],
+                    'check_out' => $validated['check_out'],
+                    'total_cats' => $validated['total_cats'],
+                    'total_price' => $totalPrice,
+                    'visit_time' => $validated['visit_time'] ?? 'none',
+                    'status' => 'pending',
+                    'notes' => $validated['notes'] ?? null,
+                ]);
+
+                // --- MIDTRANS INTEGRATION ---
+                Config::$serverKey = config('services.midtrans.server_key');
+                Config::$isProduction = config('services.midtrans.is_production', false);
+                Config::$isSanitized = true;
+                Config::$is3ds = true;
+
+                // SSL verification: enabled in production, disabled only in local dev
+                if (app()->environment('local')) {
+                    Config::$curlOptions = [
+                        CURLOPT_SSL_VERIFYHOST => 0,
+                        CURLOPT_SSL_VERIFYPEER => 0,
+                        CURLOPT_HTTPHEADER => [],
+                    ];
+                } else {
+                    Config::$curlOptions = [
+                        CURLOPT_SSL_VERIFYHOST => 2,
+                        CURLOPT_SSL_VERIFYPEER => 1,
+                        CURLOPT_HTTPHEADER => [],
+                    ];
+                }
+
+                $params = [
+                    'transaction_details' => [
+                        'order_id' => 'BKG-'.$booking->id.'-'.time(),
+                        'gross_amount' => $totalPrice,
+                    ],
+                    'customer_details' => [
+                        'first_name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone ?? '081234567890',
+                    ],
+                ];
+
+                try {
+                    $snapToken = Snap::getSnapToken($params);
+                    $booking->update(['snap_token' => $snapToken]);
+                } catch (\Exception $e) {
+                    \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
+                    if (app()->environment('local')) {
+                        // Fallback for local development so QA testing is not blocked by Midtrans credential issues
+                        $booking->update(['snap_token' => 'dummy_token_local_testing_'.time()]);
+                    } else {
+                        // Throw to rollback the transaction
+                        throw $e;
+                    }
+                }
+                // --- END MIDTRANS INTEGRATION ---
+
+                // Notify admins
+                $admins = User::where('role', 'admin')->get();
+                foreach ($admins as $admin) {
+                    $admin->notify(new AppNotification(
+                        'Pesanan Baru',
+                        "Pesanan baru ({$booking->booking_type}) dari {$user->name}",
+                        'info',
+                        '/admin/reservations'
+                    ));
+                }
+
+                return response()->json($booking->load(['user', 'room', 'sitter']), 201);
+            });
         } catch (\Exception $e) {
-            \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
-            if (app()->environment('local')) {
-                // Fallback for local development so QA testing is not blocked by Midtrans credential issues
-                $booking->update(['snap_token' => 'dummy_token_local_testing_'.time()]);
-            } else {
-                $booking->delete();
-
-                return response()->json(['message' => 'Failed to generate payment token: '.$e->getMessage()], 500);
-            }
+            return response()->json(['message' => 'Gagal memproses pesanan: ' . $e->getMessage()], 500);
         }
-        // --- END MIDTRANS INTEGRATION ---
-
-        // Notify admins
-        $admins = User::where('role', 'admin')->get();
-        foreach ($admins as $admin) {
-            $admin->notify(new AppNotification(
-                'Pesanan Baru',
-                "Pesanan baru ({$booking->booking_type}) dari {$user->name}",
-                'info',
-                '/admin/reservations'
-            ));
-        }
-
-        return response()->json($booking->load(['user', 'room', 'sitter']), 201);
     }
 
     public function paySuccess(Booking $booking)
     {
-        // For local development bypass to mark payment as paid
-        // without waiting for Midtrans webhook which can't reach localhost
-        if (Auth::user()->role !== 'admin' && $booking->user_id !== Auth::id()) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+        // CRITICAL SECURITY: Only admin can manually mark payment as paid.
+        // Regular users must pay through Midtrans gateway (webhook handles status update).
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized — payment must go through payment gateway'], 403);
         }
 
         if ($booking->payment_status !== 'paid') {
@@ -241,9 +248,15 @@ class BookingController extends Controller
             if ($booking->user_id !== $user->id || $booking->status !== 'pending') {
                 return response()->json(['message' => 'Unauthorized or booking cannot be deleted'], 403);
             }
+        } else {
+            // Admin Guard: Prevent deleting bookings that are paid and active (checked_in, approved, etc.)
+            // to ensure financial data integrity and avoid accidental data loss.
+            if ($booking->payment_status === 'paid' && in_array($booking->status, ['approved', 'checked_in', 'checked_out'])) {
+                return response()->json(['message' => 'Tidak dapat menghapus pesanan aktif yang sudah lunas.'], 400);
+            }
         }
 
-        $booking->delete();
+        $booking->delete(); // Soft deletes since Booking uses SoftDeletes
 
         return response()->json(['message' => 'Booking deleted successfully']);
     }

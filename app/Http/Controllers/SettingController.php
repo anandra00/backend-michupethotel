@@ -20,8 +20,14 @@ class SettingController extends Controller
             'settings' => 'required|array',
         ]);
 
+        // Whitelist: only these setting keys may be modified via API
+        $allowedKeys = ['admin_fee', 'site_name', 'contact_phone', 'contact_email', 'address'];
+
         foreach ($validated['settings'] as $key => $value) {
-            if ($key === 'admin_fee' && !is_numeric($value)) {
+            if (! in_array($key, $allowedKeys)) {
+                continue; // silently skip unauthorized keys
+            }
+            if ($key === 'admin_fee' && ! is_numeric($value)) {
                 return response()->json(['message' => 'Biaya admin harus berupa angka.'], 422);
             }
             Setting::where('key', $key)->update(['value' => $value]);

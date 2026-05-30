@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Storage;
 
 class RoomController extends Controller
 {
@@ -73,6 +74,10 @@ class RoomController extends Controller
         ]);
 
         if ($request->hasFile('photo')) {
+            // Delete old photo if it exists to prevent storage leaks
+            if ($room->photo) {
+                Storage::disk('public')->delete($room->photo);
+            }
             $validated['photo'] = $request->file('photo')->store('rooms', 'public');
         }
 
@@ -88,6 +93,20 @@ class RoomController extends Controller
     public function destroy(string $id)
     {
         $room = Room::findOrFail($id);
+
+        // Security Guard: Prevent deleting a room with active bookings (H-05 / M-09)
+        $activeBookings = \App\Models\Booking::where('room_id', $id)
+            ->whereIn('status', ['pending', 'approved', 'checked_in'])
+            ->count();
+        if ($activeBookings > 0) {
+            return response()->json(['message' => "Kamar masih memiliki {$activeBookings} booking aktif. Tidak bisa dihapus."], 422);
+        }
+
+        // Delete photo if it exists to prevent storage leaks
+        if ($room->photo) {
+            Storage::disk('public')->delete($room->photo);
+        }
+
         $room->delete();
         Cache::forget('rooms_all_array');
 

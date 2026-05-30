@@ -12,7 +12,20 @@ class SitterController extends Controller
 {
     public function index(Request $request, BookingService $bookingService)
     {
-        $sitters = Sitter::orderBy('name')->get();
+        $sitters = Sitter::withAvg('reviews', 'rating')
+            ->withCount('reviews')
+            ->withCount(['bookings as visits' => function ($q) {
+                $q->where('status', 'checked_out');
+            }])
+            ->orderBy('name')
+            ->get()
+            ->map(function ($sitter) {
+                // Alias to match frontend expected field names
+                $sitter->avg_rating = $sitter->reviews_avg_rating ? round($sitter->reviews_avg_rating, 1) : 0;
+                $sitter->review_count = $sitter->reviews_count;
+                unset($sitter->reviews_avg_rating, $sitter->reviews_count);
+                return $sitter;
+            });
 
         $checkIn = $request->query('check_in');
         $checkOut = $request->query('check_out');
@@ -66,6 +79,15 @@ class SitterController extends Controller
     public function destroy(string $id)
     {
         $sitter = Sitter::findOrFail($id);
+
+        // Security Guard: Prevent deleting a sitter with active bookings (M-08)
+        $activeBookings = Booking::where('sitter_id', $id)
+            ->whereIn('status', ['pending', 'approved', 'checked_in'])
+            ->count();
+        if ($activeBookings > 0) {
+            return response()->json(['message' => "Sitter masih memiliki {$activeBookings} booking aktif. Tidak bisa dihapus."], 422);
+        }
+
         $sitter->delete();
 
         return response()->json(['message' => 'Sitter deleted successfully']);

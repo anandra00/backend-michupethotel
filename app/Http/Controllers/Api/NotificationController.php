@@ -9,7 +9,8 @@ class NotificationController extends Controller
 {
     public function index(Request $request)
     {
-        $notifications = $request->user()->notifications;
+        // Standard production practice: Paginate notifications to prevent out-of-memory errors
+        $notifications = $request->user()->notifications()->paginate(20);
 
         return response()->json($notifications);
     }

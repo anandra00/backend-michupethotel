@@ -19,12 +19,13 @@ class DailyReportController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        // Standard production practice: Paginate daily reports to prevent memory issues
         $reports = DailyReport::where('cat_id', $catId)
             ->with(['booking.sitter', 'booking' => function ($query) {
                 $query->select('id', 'sitter_id', 'status');
             }])
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->paginate(20);
 
         return response()->json($reports);
     }
@@ -43,6 +44,15 @@ class DailyReportController extends Controller
             'time' => 'required|string',
             'photo' => 'nullable|image|max:5120',
         ]);
+
+        // Security & Logic Guard: Validate that the cat belongs to the booking's owner
+        $bookingObj = Booking::findOrFail($validated['booking_id']);
+        $catObj = \App\Models\Cat::findOrFail($validated['cat_id']);
+        if ($catObj->user_id !== $bookingObj->user_id) {
+            return response()->json([
+                'message' => 'Kucing yang dipilih tidak terasosiasi dengan pemilik pesanan ini.',
+            ], 422);
+        }
 
         $photoPath = null;
         if ($request->hasFile('photo')) {

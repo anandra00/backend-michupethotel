@@ -36,6 +36,16 @@ class SecurityHeaders
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');
         }
 
+        // Content-Security-Policy for defense-in-depth (M-07)
+        $response->headers->set('Content-Security-Policy', 
+            "default-src 'self'; " .
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://app.sandbox.midtrans.com https://app.midtrans.com; " .
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " .
+            "font-src 'self' https://fonts.gstatic.com; " .
+            "img-src 'self' data: https://images.unsplash.com https://api.dicebear.com blob:; " .
+            "connect-src 'self' https://api.sandbox.midtrans.com https://api.midtrans.com " . config('app.frontend_url', 'https://frontend-sage-theta.vercel.app')
+        );
+
         // Remove server identification header
         $response->headers->remove('X-Powered-By');
         $response->headers->remove('Server');

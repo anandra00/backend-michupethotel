@@ -28,10 +28,21 @@ class PaymentCallbackController extends Controller
                 return response()->json(['message' => 'Booking not found'], 404);
             }
 
-            if ($request->transaction_status == 'capture' || $request->transaction_status == 'settlement') {
+            if ($request->transaction_status == 'settlement') {
+                // settlement = final confirmation, always safe to mark as paid
                 if ($booking->payment_status !== 'paid') {
                     $booking->update(['payment_status' => 'paid']);
                     app(WhatsappService::class)->sendBookingConfirmation($booking);
+                }
+            } elseif ($request->transaction_status == 'capture') {
+                // capture = credit card — MUST verify fraud_status before marking paid
+                if ($request->fraud_status == 'accept') {
+                    if ($booking->payment_status !== 'paid') {
+                        $booking->update(['payment_status' => 'paid']);
+                        app(WhatsappService::class)->sendBookingConfirmation($booking);
+                    }
+                } else {
+                    \Log::warning("Midtrans fraud detected for booking #{$bookingId}: fraud_status={$request->fraud_status}");
                 }
             } elseif ($request->transaction_status == 'cancel' || $request->transaction_status == 'deny' || $request->transaction_status == 'expire') {
                 $booking->update(['payment_status' => 'failed', 'status' => 'cancelled']);
