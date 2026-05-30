@@ -32,7 +32,7 @@ class CatController extends Controller
             'weight' => 'required|numeric|min:0.1',
             'gender' => 'required|string|in:male,female,Male,Female',
             'notes' => 'nullable|string',
-            'photo' => 'nullable|image|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         $validated['user_id'] = Auth::id();
@@ -61,7 +61,7 @@ class CatController extends Controller
             'weight' => 'sometimes|required|numeric|min:0.1',
             'gender' => 'sometimes|required|string|in:male,female,Male,Female',
             'notes' => 'nullable|string',
-            'photo' => 'nullable|image|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
         ]);
 
         if (isset($validated['gender'])) {
