@@ -45,4 +45,16 @@ class AdminController extends Controller
         // Paginate by default for admin list to prevent memory leak
         return response()->json($query->paginate(20));
     }
+
+    public function exportExcel()
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(new \App\Exports\BookingsExport, 'laporan_booking_michu.xlsx');
+    }
+
+    public function exportPdf()
+    {
+        $bookings = Booking::with(['user'])->orderBy('created_at', 'desc')->get();
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.reports', compact('bookings'));
+        return $pdf->download('laporan_booking_michu.pdf');
+    }
 }

@@ -94,6 +94,8 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::middleware([IsAdmin::class])->group(function () {
             Route::get('/admin/stats', [AdminController::class, 'stats']);
             Route::get('/admin/reports', [AdminController::class, 'reports']);
+            Route::get('/admin/reports/export/excel', [AdminController::class, 'exportExcel']);
+            Route::get('/admin/reports/export/pdf', [AdminController::class, 'exportPdf']);
             Route::get('/admin/cats', [AdminController::class, 'cats']); // NEW ROUTE
             Route::apiResource('admin/rooms', RoomController::class)->except(['index', 'show']);
             Route::apiResource('admin/coupons', CouponController::class);
