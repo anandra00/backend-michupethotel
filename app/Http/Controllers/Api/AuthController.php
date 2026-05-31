@@ -30,7 +30,7 @@ class AuthController extends Controller
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
-            'phone' => $validated['phone'],
+            'phone' => $validated['phone'] ?? null,
             'otp' => $otp,
             'otp_expires_at' => now()->addMinutes(15),
         ]);
