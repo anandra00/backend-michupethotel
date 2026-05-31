@@ -39,8 +39,8 @@ class BookingService
                     $query->whereIn('visit_time', [$visitTime, 'both']);
                 }
             })
-            ->where('check_in', '<', $checkOut)
-            ->where('check_out', '>', $checkIn)
+            ->where('check_in', '<=', $checkOut)
+            ->where('check_out', '>=', $checkIn)
             ->exists();
     }
 
