@@ -69,4 +69,37 @@ class NotificationController extends Controller
 
         return response()->json(['message' => 'Notifikasi uji coba berhasil dikirim!']);
     }
+
+    public function subscribe(Request $request)
+    {
+        $validated = $request->validate([
+            'endpoint' => 'required|string',
+            'keys.p256dh' => 'required|string',
+            'keys.auth' => 'required|string',
+        ]);
+
+        $user = $request->user();
+
+        \App\Models\PushSubscription::updateOrCreate(
+            ['endpoint' => $validated['endpoint']],
+            [
+                'user_id' => $user->id,
+                'public_key' => $validated['keys']['p256dh'],
+                'auth_token' => $validated['keys']['auth'],
+            ]
+        );
+
+        return response()->json(['message' => 'Subscription saved successfully.']);
+    }
+
+    public function unsubscribe(Request $request)
+    {
+        $validated = $request->validate([
+            'endpoint' => 'required|string',
+        ]);
+
+        \App\Models\PushSubscription::where('endpoint', $validated['endpoint'])->delete();
+
+        return response()->json(['message' => 'Subscription removed successfully.']);
+    }
 }

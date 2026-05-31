@@ -60,4 +60,70 @@ class MessageController extends Controller
 
         return response()->json($message, 201);
     }
+
+    /**
+     * Stream new messages for a booking via Server-Sent Events (SSE).
+     */
+    public function stream(Request $request, $bookingId)
+    {
+        $booking = Booking::findOrFail($bookingId);
+        
+        $user = Auth::user();
+        if (!$user && $request->has('token')) {
+            $token = $request->query('token');
+            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($token);
+            if ($tokenModel) {
+                $user = $tokenModel->tokenable;
+                Auth::login($user);
+            }
+        }
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        if ($user->role !== 'admin' && $booking->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        return response()->stream(function () use ($bookingId, $request) {
+            $lastId = $request->query('last_id', 0);
+            $startTime = time();
+            
+            while (true) {
+                if (connection_aborted()) {
+                    break;
+                }
+                
+                $messages = Message::where('booking_id', $bookingId)
+                    ->where('id', '>', $lastId)
+                    ->with('sender:id,name,role,photo')
+                    ->get();
+                    
+                if ($messages->isNotEmpty()) {
+                    foreach ($messages as $msg) {
+                        echo "data: " . json_encode($msg) . "\n\n";
+                        $lastId = $msg->id;
+                    }
+                    ob_flush();
+                    flush();
+                }
+                
+                echo ": ping\n\n";
+                ob_flush();
+                flush();
+                
+                sleep(1);
+                
+                if (time() - $startTime > 30) {
+                    break;
+                }
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache, private',
+            'Connection' => 'keep-alive',
+            'X-Accel-Buffering' => 'no',
+        ]);
+    }
 }

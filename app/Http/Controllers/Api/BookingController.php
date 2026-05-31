@@ -230,7 +230,10 @@ class BookingController extends Controller
 
             if ($status === 'settlement' || ($status === 'capture' && ($result['data']['fraud_status'] ?? '') === 'accept')) {
                 if ($booking->payment_status !== 'paid') {
-                    $booking->update(['payment_status' => 'paid']);
+                    $booking->update([
+                        'payment_status' => 'paid',
+                        'status' => 'approved', // auto-confirm booking upon payment
+                    ]);
                     app(WhatsappService::class)->sendBookingConfirmation($booking);
                 }
             } elseif (in_array($status, ['cancel', 'deny', 'expire'])) {
@@ -584,5 +587,50 @@ class BookingController extends Controller
             'amount' => $refundAmount,
             'midtrans_result' => null,
         ];
+    }
+
+    /**
+     * Generate PDF invoice for paid bookings.
+     */
+    public function invoice(string $id)
+    {
+        $booking = Booking::with(['user', 'room', 'sitter', 'cats'])->findOrFail($id);
+        $user = Auth::user();
+
+        if ($user->role !== 'admin' && $booking->user_id !== $user->id) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ($booking->payment_status !== 'paid') {
+            return response()->json(['message' => 'Invoice hanya tersedia untuk pesanan yang sudah lunas.'], 400);
+        }
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.invoice', compact('booking'));
+        return $pdf->download("invoice-BKG-{$booking->id}.pdf");
+    }
+
+    /**
+     * Get occupied date ranges for a room or sitter.
+     */
+    public function occupiedDates(Request $request)
+    {
+        $request->validate([
+            'room_id' => 'nullable|integer|exists:rooms,id',
+            'sitter_id' => 'nullable|integer|exists:sitters,id',
+        ]);
+
+        $query = Booking::whereIn('status', ['pending', 'approved', 'checked_in']);
+
+        if ($request->has('room_id')) {
+            $query->where('room_id', $request->room_id)->where('booking_type', 'board');
+        } elseif ($request->has('sitter_id')) {
+            $query->where('sitter_id', $request->sitter_id)->where('booking_type', 'sitter');
+        } else {
+            return response()->json([]);
+        }
+
+        $bookings = $query->get(['check_in', 'check_out', 'visit_time']);
+
+        return response()->json($bookings);
     }
 }

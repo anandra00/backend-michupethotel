@@ -27,6 +27,7 @@ Route::middleware(['throttle:5,1'])->group(function () {
 Route::middleware(['throttle:60,1'])->group(function () {
     // Public Settings
     Route::get('/settings', [SettingController::class, 'index']);
+    Route::get('/vapid-key', function() { return response()->json(['public_key' => env('VAPID_PUBLIC_KEY')]); });
 
     // Webhook Route (Midtrans callback — no auth needed)
     Route::post('/midtrans/callback', [PaymentCallbackController::class, 'handleCallback']);
@@ -36,6 +37,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
     Route::get('/rooms/{room}', [RoomController::class, 'show']);
     Route::get('/visit-services', [VisitServiceController::class, 'index']);
     Route::get('/sitter-packages', [SitterPackageController::class, 'index']);
+    Route::get('/bookings/{booking}/messages/stream', [MessageController::class, 'stream']);
 
     // Protected routes (User & Admin)
     Route::middleware(['auth:sanctum'])->group(function () {
@@ -47,6 +49,8 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::put('/notifications/mark-all-read', [NotificationController::class, 'markAllAsRead']);
         Route::put('/notifications/{id}/mark-as-read', [NotificationController::class, 'markAsRead']);
         Route::post('/notifications/test', [NotificationController::class, 'testNotification']);
+        Route::post('/push-subscriptions', [NotificationController::class, 'subscribe']);
+        Route::post('/push-subscriptions/unsubscribe', [NotificationController::class, 'unsubscribe']);
 
         // Profile update
         Route::get('/user/stats', [UserController::class, 'stats']);
@@ -56,6 +60,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::get('/sitters', [SitterController::class, 'index']);
 
         // Bookings
+        Route::get('/bookings/occupied-dates', [BookingController::class, 'occupiedDates']);
         Route::get('/bookings', [BookingController::class, 'index']);
         Route::post('/bookings', [BookingController::class, 'store']);
         Route::get('/bookings/{booking}', [BookingController::class, 'show']);
@@ -64,6 +69,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::post('/bookings/{booking}/verify-payment', [BookingController::class, 'verifyPayment']);
         Route::post('/bookings/{booking}/cancel', [BookingController::class, 'cancelBooking']);
         Route::post('/bookings/{booking}/sitter-checkin', [BookingController::class, 'sitterCheckin']);
+        Route::get('/bookings/{booking}/invoice', [BookingController::class, 'invoice']);
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
 
         // Coupons validation (user-facing) — Rate limited to 10 attempts/min

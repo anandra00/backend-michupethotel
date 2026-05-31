@@ -35,14 +35,20 @@ class PaymentCallbackController extends Controller
             if ($request->transaction_status == 'settlement') {
                 // settlement = final confirmation, always safe to mark as paid
                 if ($booking->payment_status !== 'paid') {
-                    $booking->update(['payment_status' => 'paid']);
+                    $booking->update([
+                        'payment_status' => 'paid',
+                        'status' => 'approved', // auto-confirm booking upon payment
+                    ]);
                     app(WhatsappService::class)->sendBookingConfirmation($booking);
                 }
             } elseif ($request->transaction_status == 'capture') {
                 // capture = credit card — MUST verify fraud_status before marking paid
                 if ($request->fraud_status == 'accept') {
                     if ($booking->payment_status !== 'paid') {
-                        $booking->update(['payment_status' => 'paid']);
+                        $booking->update([
+                            'payment_status' => 'paid',
+                            'status' => 'approved', // auto-confirm booking upon payment
+                        ]);
                         app(WhatsappService::class)->sendBookingConfirmation($booking);
                     }
                 } else {
