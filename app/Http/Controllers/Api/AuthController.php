@@ -24,22 +24,19 @@ class AuthController extends Controller
             'phone' => 'nullable|string|max:20',
         ]);
 
-        $otp = sprintf("%06d", mt_rand(1, 999999));
-
         $user = User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
             'phone' => $validated['phone'] ?? null,
-            'otp' => $otp,
-            'otp_expires_at' => now()->addMinutes(15),
         ]);
 
-        Mail::to($user->email)->send(new VerifyOtpMail($otp));
+        $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'message' => 'Registrasi berhasil. Silakan cek email untuk verifikasi OTP.',
-            'email' => $user->email,
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+            'user' => (new UserResource($user))->resolve(),
         ]);
     }
 
@@ -56,13 +53,6 @@ class AuthController extends Controller
             throw ValidationException::withMessages([
                 'email' => ['Kredensial yang diberikan salah.'],
             ]);
-        }
-
-        if (is_null($user->email_verified_at)) {
-            return response()->json([
-                'message' => 'Akun belum diverifikasi.',
-                'email_not_verified' => true,
-            ], 403);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
