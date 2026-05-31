@@ -22,6 +22,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['throttle:5,1'])->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 });
 
 Route::middleware(['throttle:60,1'])->group(function () {
