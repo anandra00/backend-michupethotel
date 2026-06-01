@@ -82,6 +82,24 @@ class CouponController extends Controller
     }
 
     /**
+     * Get active coupons for users.
+     */
+    public function activeCoupons()
+    {
+        $coupons = Coupon::where('is_active', true)
+            ->where('valid_from', '<=', now())
+            ->where('valid_until', '>=', now())
+            ->where(function ($query) {
+                $query->where('usage_limit', 0)
+                      ->orWhereColumn('used_count', '<', 'usage_limit');
+            })
+            ->orderBy('valid_until', 'asc')
+            ->get();
+
+        return response()->json($coupons);
+    }
+
+    /**
      * Validate a coupon code and preview discount (user-facing).
      */
     public function validateCoupon(Request $request)

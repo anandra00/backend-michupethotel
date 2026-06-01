@@ -75,6 +75,7 @@ Route::middleware(['throttle:60,1'])->group(function () {
         Route::delete('/bookings/{booking}', [BookingController::class, 'destroy']);
 
         // Coupons validation (user-facing) — Rate limited to 10 attempts/min
+        Route::get('/coupons/active', [CouponController::class, 'activeCoupons']);
         Route::middleware('throttle:10,1')->post('/coupons/validate', [CouponController::class, 'validateCoupon']);
 
         // Chat messages — Rate limited to 30 messages/min
