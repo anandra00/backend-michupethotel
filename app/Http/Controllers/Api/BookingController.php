@@ -44,144 +44,19 @@ class BookingController extends Controller
 
         return response()->json($bookings);
     }
-    public function store(Request $request)
+    public function store(\App\Http\Requests\StoreBookingRequest $request)
     {
-        $validated = $request->validate([
-            'booking_type' => 'required|string|in:board,sitter',
-            'room_id' => 'exclude_if:booking_type,sitter|required_if:booking_type,board|exists:rooms,id',
-            'sitter_id' => 'nullable|exists:sitters,id',
-            'sitter_package' => 'nullable|exists:sitter_packages,id',
-            'check_in' => 'required|date',
-            'check_out' => 'required|date|after_or_equal:check_in',
-            'cat_ids' => 'required|array|min:1',
-            'cat_ids.*' => 'exists:cats,id',
-            'notes' => 'nullable|string',
-            'visit_time' => 'nullable|string|in:morning,afternoon,both,none',
-            'coupon_code' => 'nullable|string|max:50',
-        ]);
-
-        // Security & Ownership Guard: Verify that the selected cats belong to the authenticated user
-        $userCatCount = \App\Models\Cat::where('user_id', Auth::id())
-            ->whereIn('id', $validated['cat_ids'])
-            ->count();
-        if ($userCatCount !== count($validated['cat_ids'])) {
-            return response()->json(['message' => 'Salah satu kucing yang dipilih tidak valid atau bukan milik Anda.'], 422);
-        }
+        $validated = $request->validated();
+        // Validation logic for cat_ids belongs to the user is already done in StoreBookingRequest withValidator
 
         $validated['total_cats'] = count($validated['cat_ids']);
+        $user = Auth::user();
 
         try {
-            return DB::transaction(function () use ($validated) {
-                $totalPrice = 0;
-
-                if ($validated['booking_type'] === 'board') {
-                    if (! $this->bookingService->isRoomAvailable($validated['room_id'], $validated['check_in'], $validated['check_out'])) {
-                        return response()->json([
-                            'message' => 'Kamar ini sudah di-booking pada tanggal tersebut.',
-                        ], 422);
-                    }
-                    $totalPrice = $this->bookingService->calculateBoardingPrice($validated['room_id'], $validated['check_in'], $validated['check_out']);
-                } else {
-                    $visitTime = $validated['visit_time'] ?? 'none';
-                    if (! $this->bookingService->isSitterAvailable($validated['sitter_id'], $validated['check_in'], $validated['check_out'], $visitTime)) {
-                        return response()->json([
-                            'message' => 'Sitter ini sudah memiliki jadwal penuh (bentrok) pada tanggal dan shift tersebut.',
-                        ], 422);
-                    }
-                    $totalPrice = $this->bookingService->calculateSitterPrice($validated['sitter_package'], $validated['check_in'], $validated['check_out'], $validated['total_cats']);
-                }
-
-                // --- COUPON DISCOUNT ---
-                $couponId = null;
-                $discountAmount = 0;
-                if (! empty($validated['coupon_code'])) {
-                    $coupon = Coupon::where('code', strtoupper($validated['coupon_code']))->first();
-                    if ($coupon && $coupon->isUsable()) {
-                        $discountAmount = $coupon->calculateDiscount($totalPrice);
-                        if ($discountAmount > 0) {
-                            $couponId = $coupon->id;
-                            $totalPrice = max(0, $totalPrice - $discountAmount);
-                            $coupon->increment('used_count');
-                        }
-                    }
-                }
-                // --- END COUPON DISCOUNT ---
-
-                $user = Auth::user();
-
-                $booking = Booking::create([
-                    'user_id' => $user->id,
-                    'booking_type' => $validated['booking_type'],
-                    'room_id' => $validated['booking_type'] === 'board' ? $validated['room_id'] : null,
-                    'sitter_id' => $validated['sitter_id'] ?? null,
-                    'sitter_package' => $validated['sitter_package'] ?? null,
-                    'coupon_id' => $couponId,
-                    'check_in' => $validated['check_in'],
-                    'check_out' => $validated['check_out'],
-                    'total_cats' => $validated['total_cats'],
-                    'total_price' => $totalPrice,
-                    'discount_amount' => $discountAmount,
-                    'visit_time' => $validated['visit_time'] ?? 'none',
-                    'status' => 'pending',
-                    'notes' => $validated['notes'] ?? null,
-                ]);
-
-                // Sync the selected cats pivot relation
-                $booking->cats()->sync($validated['cat_ids']);
-
-                // --- MIDTRANS INTEGRATION ---
-                $midtransService = app(MidtransService::class);
-                $midtransService->configureSnap();
-
-                $orderId = 'BKG-'.$booking->id.'-'.time();
-                $params = [
-                    'transaction_details' => [
-                        'order_id' => $orderId,
-                        'gross_amount' => $totalPrice,
-                    ],
-                    'customer_details' => [
-                        'first_name' => $user->name,
-                        'email' => $user->email,
-                        'phone' => $user->phone ?? '081234567890',
-                    ],
-                    'callbacks' => [
-                        'finish' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
-                        'unfinish' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
-                        'error' => env('FRONTEND_URL', 'https://frontend-sage-theta.vercel.app') . '/dashboard/history',
-                    ],
-                ];
-
-                try {
-                    $snapToken = Snap::getSnapToken($params);
-                    $booking->update(['snap_token' => $snapToken, 'midtrans_order_id' => $orderId]);
-                } catch (\Exception $e) {
-                    \Log::error('Midtrans Snap Error: '.$e->getMessage().' | Trace: '.$e->getTraceAsString());
-                    if (app()->environment('local', 'testing')) {
-                        $booking->update([
-                            'snap_token' => 'dummy_token_local_testing_'.time(),
-                            'midtrans_order_id' => $orderId,
-                        ]);
-                    } else {
-                        throw $e;
-                    }
-                }
-                // --- END MIDTRANS INTEGRATION ---
-
-                // Notify admins
-                $admins = User::where('role', 'admin')->get();
-                foreach ($admins as $admin) {
-                    $admin->notify(new AppNotification(
-                        'Pesanan Baru',
-                        "Pesanan baru ({$booking->booking_type}) dari {$user->name}",
-                        'info',
-                        '/admin/reservations'
-                    ));
-                }
-
-                return response()->json($booking->load(['user', 'room', 'sitter', 'cats']), 201);
-            });
+            $booking = $this->bookingService->processBooking($validated, $user);
+            return response()->json($booking->load(['user', 'room', 'sitter', 'cats']), 201);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Gagal memproses pesanan: ' . $e->getMessage()], 500);
+            return response()->json(['message' => 'Gagal memproses pesanan: ' . $e->getMessage()], 422);
         }
     }
 
